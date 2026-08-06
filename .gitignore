@@ -1,6 +1,6 @@
-# Local doc cache (never committed — see README "Provenance")
+# Local doc cache and generated heading index (never committed — see README "Provenance")
 .cache/
-*.jsonl
+.cache/**/*.jsonl
 
 # Eval run output
 evals/runs/

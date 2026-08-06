@@ -30,3 +30,20 @@ Verified 2026-08-06 against the `australia` branch. Re-verify before relying on 
 - The sync script is dependency-free POSIX shell. No Node, no Python venv, no `npx`.
 - Search belongs to the host agent's native tools. Do not wrap grep.
 - This skill is **docs-only**. It never touches a live ServiceNow instance.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues at `vbilgin/skill-sndocs`, via the `gh` CLI.
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default canonical vocabulary — label strings match role names exactly.
+See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` and `docs/adr/` at the repo root.
+See `docs/agents/domain.md`.
