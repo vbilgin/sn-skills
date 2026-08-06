@@ -37,19 +37,21 @@ test_records_the_resolved_commit_and_fetch_timestamp() {
 }
 
 test_a_second_sync_on_a_fresh_cache_is_a_no_op() {
-	run_sndocs sync --family australia --upstream "$(fixture_upstream)"
+	# On a fixed clock, because a reported snapshot includes the cache's age
+	# and would otherwise differ by however long the case took to run.
+	run_sndocs_at 0 sync --family australia --upstream "$(fixture_upstream)"
 	assert_equals 0 "$RUN_STATUS" "first sync should exit zero: $RUN_ERR"
 
-	run_sndocs status --family australia
+	run_sndocs_at 0 status --family australia
 	before=$RUN_OUT
 	marker="$(cache_root)/australia/repo/.git/sndocs-not-a-re-clone"
 	: >"$marker"
 
-	run_sndocs sync --family australia --upstream "$(fixture_upstream)"
+	run_sndocs_at 0 sync --family australia --upstream "$(fixture_upstream)"
 	assert_equals 0 "$RUN_STATUS" "second sync should exit zero: $RUN_ERR"
 
 	assert_file_exists "$marker" 'a fresh cache should not be re-cloned'
-	run_sndocs status --family australia
+	run_sndocs_at 0 status --family australia
 	assert_equals "$before" "$RUN_OUT" 'the recorded snapshot should survive a second sync'
 }
 

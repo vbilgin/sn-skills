@@ -21,25 +21,43 @@ SNDOCS_DEFAULT_FAMILY='australia'
 # across directories and cone mode can only express directory prefixes.
 SNDOCS_INDEX_PATTERN='/markdown/*/index.md'
 
+# Seven days, against upstream's roughly monthly publication cadence — enough
+# margin that a refresh is never the reason an answer is late, and short enough
+# that a family that has just shipped is picked up without asking.
+SNDOCS_STALE_AFTER=604800
+
 usage() {
 	cat <<'EOF'
 sndocs — local cache of ServiceNow product documentation, one cache per family.
 
 Usage:
-  sndocs sync   [--family <family>] [--upstream <repository>]
-  sndocs status [--family <family>]
+  sndocs sync    [--family <family>] [--upstream <repository>]
+  sndocs widen   [--family <family>] --publication <publication> ...
+  sndocs refresh [--family <family>]
+  sndocs status  [--family <family>]
   sndocs help
 
 Commands:
   sync     Create the cache for a family if it does not exist: a blobless,
            shallow, sparse clone holding the API reference publication and
            every publication index. Records the resolved commit and the fetch
-           timestamp. A second sync on a fresh cache is a no-op.
-  status   Report the family, commit, fetch timestamp, and cached publications
-           as JSON on stdout. Exits non-zero if that family has no cache.
+           timestamp. A second sync on a fresh cache is a no-op; a sync on a
+           cache older than seven days refreshes it first.
+  widen    Add publications to what the cache holds, pulling only the new
+           content, and refreshing a stale cache first. Publications already
+           cached are left alone. Fails if the publication is not published
+           upstream for that family — which is what keeps "not cached"
+           distinguishable from "not documented".
+  refresh  Fetch the family again now and record the new commit and fetch
+           timestamp, without waiting for the staleness window. If upstream
+           cannot be reached, the existing cache is kept and its age reported.
+  status   Report the family, commit, fetch timestamp, cache age, and both what
+           is cached and what upstream publishes, as JSON on stdout. Exits
+           non-zero if that family has no cache.
 
 Options:
   --family <family>       Documentation family to work on (default: australia).
+  --publication <name>    Publication to add to the cache. Repeat for several.
   --upstream <repository> Upstream documentation repository to clone from.
                           Defaults to $SNDOCS_UPSTREAM, else
                           https://github.com/ServiceNow/ServiceNowDocs.git.
@@ -50,6 +68,9 @@ Options:
 
 Environment:
   SNDOCS_UPSTREAM   Default for --upstream.
+  SNDOCS_NOW        Unix timestamp to treat as the current time. Exists so the
+                    test suite can cross the seven-day staleness window without
+                    waiting a week. Part of the supported interface.
   XDG_CACHE_HOME    Cache location root (default: ~/.cache). The cache lives at
                     $XDG_CACHE_HOME/sndocs/<family>.
 
@@ -70,20 +91,80 @@ cache_root() {
 	printf '%s/sndocs\n' "${XDG_CACHE_HOME:-$HOME/.cache}"
 }
 
-# A family name becomes both a branch name and a path segment, so it is
-# checked before either use — nothing outside the cache location may be
-# created, read, or modified, and a family name is the only user-supplied
-# component of that path.
-assert_family_name() {
-	case $1 in
+# Family and publication names become branch names, path segments, and sparse
+# patterns, so each is checked before any of those uses — nothing outside the
+# cache location may be created, read, or modified, and these names are the
+# only user-supplied components of that path.
+assert_path_segment() {
+	# assert_path_segment <kind> <name>
+	case $2 in
 	'' | *[!a-zA-Z0-9._-]* | .* | *..*)
-		die "not a usable family name: '$1'"
+		die "not a usable $1 name: '$2'"
 		;;
 	esac
 }
 
+assert_family_name() {
+	assert_path_segment family "$1"
+}
+
+assert_publication_name() {
+	assert_path_segment publication "$1"
+}
+
 family_dir() {
 	printf '%s/%s\n' "$(cache_root)" "$1"
+}
+
+# ----------------------------------------------------------------------- time
+#
+# One clock, read in one place. SNDOCS_NOW overrides it so the seven-day
+# staleness window can be crossed in a test without waiting a week.
+
+now_epoch() {
+	if [ -n "${SNDOCS_NOW:-}" ]; then
+		printf '%s\n' "$SNDOCS_NOW"
+	else
+		date -u +%s
+	fi
+}
+
+# BSD date spells this -r, GNU date spells it -d @; try both rather than
+# depending on which userland this is.
+epoch_to_iso() {
+	date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null ||
+		date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ
+}
+
+# A cache's age is what makes a stale answer attributable, so it is reported
+# rather than suppressed. A clock that has gone backwards reads as new rather
+# than as negative.
+age_seconds() {
+	# age_seconds <fetched_epoch>
+	_age=$(($(now_epoch) - $1))
+	[ "$_age" -ge 0 ] || _age=0
+	printf '%s\n' "$_age"
+}
+
+age_human() {
+	# age_human <seconds> — for the messages a person reads.
+	if [ "$1" -lt 3600 ]; then
+		printf 'less than an hour old\n'
+	elif [ "$1" -lt 86400 ]; then
+		_hours=$(($1 / 3600))
+		if [ "$_hours" -eq 1 ]; then
+			printf '1 hour old\n'
+		else
+			printf '%s hours old\n' "$_hours"
+		fi
+	else
+		_days=$(($1 / 86400))
+		if [ "$_days" -eq 1 ]; then
+			printf '1 day old\n'
+		else
+			printf '%s days old\n' "$_days"
+		fi
+	fi
 }
 
 # ------------------------------------------------------------------- snapshot
@@ -93,11 +174,17 @@ family_dir() {
 
 snapshot_write() {
 	# snapshot_write <file> <family> <upstream> <commit> <fetched_at>
+	#                <fetched_epoch>
+	#
+	# The fetch time is recorded twice on purpose: once for a person to read,
+	# once as an integer, so that measuring a cache's age never depends on
+	# parsing a timestamp in portable shell.
 	cat >"$1" <<EOF
 family=$2
 upstream=$3
 commit=$4
 fetched_at=$5
+fetched_epoch=$6
 EOF
 }
 
@@ -114,14 +201,27 @@ snapshot_read() {
 
 # --------------------------------------------------------------------- output
 
+# Publications travel as newline-separated lists, because that is what git
+# hands back and what the output takes. These two are the whole vocabulary for
+# working with them.
+
+# contains_line <list> <item> — is that item one of the lines?
+contains_line() {
+	printf '%s\n' "$1" | grep -qxF "$2"
+}
+
 json_escape() {
 	printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
-# Reads one item per line from stdin, writes them as JSON array elements.
+# json_array_elements <list> — a newline-separated list as JSON array elements.
+# Takes the list as an argument rather than on stdin so that a failure to
+# produce it fails the command, instead of being swallowed by a pipeline and
+# printed as an empty array.
 json_array_elements() {
+	[ -n "$1" ] || return 0
 	_separator=''
-	while read -r _item; do
+	printf '%s\n' "$1" | while read -r _item; do
 		printf '%s"%s"' "$_separator" "$(json_escape "$_item")"
 		_separator=', '
 	done
@@ -146,6 +246,23 @@ cone_publications() {
 	done | LC_ALL=C sort
 }
 
+# upstream_publications <repo> — every publication the family publishes, one
+# per line, read from the tree the clone already has. A blobless clone carries
+# every tree, so this needs no network and no separate manifest. It is what
+# lets "not cached" be told apart from "not documented".
+upstream_publications() {
+	# Read before it is filtered, and refused if it comes back empty: a git
+	# failure that reached the caller as an empty list would say "upstream
+	# publishes nothing", which is the one thing this must never say by
+	# accident.
+	_tree=$(git -C "$1" ls-tree -d --name-only HEAD markdown/) || _tree=''
+	[ -n "$_tree" ] ||
+		die "could not read the publication list from the cache at $1. Remove it and sync again"
+	printf '%s\n' "$_tree" |
+		sed -e 's|^markdown/||' -e 's|/$||' |
+		LC_ALL=C sort
+}
+
 cone_publication_indexes() {
 	# cone_publication_indexes <repo> — publications whose index is checked
 	# out, one per line.
@@ -157,6 +274,55 @@ cone_publication_indexes() {
 			printf '%s\n' "${_rest%/index.md}"
 		done
 	) | LC_ALL=C sort
+}
+
+# --------------------------------------------------------------- cache access
+
+assert_cache_exists() {
+	# assert_cache_exists <dir> <family>
+	[ -d "$1/repo/.git" ] && [ -f "$1/snapshot" ] ||
+		die "no cache for family '$2'. Run: sndocs sync --family $2"
+}
+
+cache_age() {
+	# cache_age <dir> <family> — age in seconds of the recorded snapshot.
+	_fetched_epoch=$(snapshot_read "$1/snapshot" fetched_epoch) ||
+		die "cache for family '$2' has no recorded fetch time. Remove $1 and sync again"
+	age_seconds "$_fetched_epoch"
+}
+
+# fetch_family <dir> <family> — fetches the family again and re-records the
+# snapshot. Returns non-zero, leaving the cache and its snapshot as they were,
+# when upstream cannot be reached: offline is a degraded mode, not a failure,
+# and a cache that still answers is worth more than a command that fails.
+fetch_family() {
+	_dir=$1
+	_family=$2
+
+	git -C "$_dir/repo" fetch --quiet --depth 1 origin "$_family" >&2 || return 1
+	git -C "$_dir/repo" reset --quiet --hard FETCH_HEAD >&2 || return 1
+
+	_commit=$(git -C "$_dir/repo" rev-parse HEAD)
+	_epoch=$(now_epoch)
+	_upstream=$(snapshot_read "$_dir/snapshot" upstream) || _upstream=''
+	snapshot_write "$_dir/snapshot" "$_family" "$_upstream" "$_commit" \
+		"$(epoch_to_iso "$_epoch")" "$_epoch"
+}
+
+# refresh_cache <dir> <family> <age-seconds> — fetches again and says what
+# happened, in the one wording both `sync` and `refresh` use. Never fails while
+# a cache is present; an unreachable upstream is reported with the cache's age
+# so the caller can stamp that age on any answer it gives.
+refresh_cache() {
+	if fetch_family "$1" "$2"; then
+		_commit=$(snapshot_read "$1/snapshot" commit) || _commit='?'
+		_fetched_at=$(snapshot_read "$1/snapshot" fetched_at) || _fetched_at='?'
+		printf 'sndocs: refreshed %s to %s (%s)\n' \
+			"$2" "$_commit" "$_fetched_at" >&2
+	else
+		printf 'sndocs: could not reach upstream; keeping the cache for %s, %s\n' \
+			"$2" "$(age_human "$3")" >&2
+	fi
 }
 
 # ----------------------------------------------------------------------- sync
@@ -188,8 +354,9 @@ cmd_sync() {
 	assert_family_name "$family"
 	dir=$(family_dir "$family")
 
-	# A fresh cache is left alone: syncing again must not re-clone. Widening
-	# the cone and refreshing a stale cache are separate concerns.
+	# A cache inside the staleness window is left alone: syncing again must
+	# not re-clone. Past the window it is refreshed in place, so that using
+	# the skill is what keeps the cache current.
 	if [ -d "$dir/repo/.git" ] && [ -f "$dir/snapshot" ]; then
 		recorded=$(snapshot_read "$dir/snapshot" upstream) || recorded=''
 		# Provenance is the point of recording the snapshot, so a cache
@@ -198,7 +365,15 @@ cmd_sync() {
 		if [ "$recorded" != "$upstream" ]; then
 			die "cache for family '$family' came from $recorded, not $upstream. Remove $dir and sync again"
 		fi
-		printf 'sndocs: cache for %s is already present at %s\n' "$family" "$dir" >&2
+
+		age=$(cache_age "$dir" "$family")
+		if [ "$age" -lt "$SNDOCS_STALE_AFTER" ]; then
+			printf 'sndocs: cache for %s is present at %s and %s\n' \
+				"$family" "$dir" "$(age_human "$age")" >&2
+			return 0
+		fi
+
+		refresh_cache "$dir" "$family" "$age"
 		return 0
 	fi
 
@@ -232,15 +407,142 @@ cmd_sync() {
 		die "could not check out family '$family'"
 
 	commit=$(git -C "$staging" rev-parse HEAD)
-	fetched_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+	fetched_epoch=$(now_epoch)
+	fetched_at=$(epoch_to_iso "$fetched_epoch")
 
 	rm -rf "$dir/repo"
 	mv "$staging" "$dir/repo"
 	trap - EXIT INT TERM
 
-	snapshot_write "$dir/snapshot" "$family" "$upstream" "$commit" "$fetched_at"
+	snapshot_write "$dir/snapshot" "$family" "$upstream" "$commit" \
+		"$fetched_at" "$fetched_epoch"
 
 	printf 'sndocs: cached %s at %s (%s)\n' "$family" "$commit" "$fetched_at" >&2
+}
+
+# ---------------------------------------------------------------------- widen
+#
+# The Cone extends to cover a publication a query needs, pulling only the new
+# content into the clone that is already there. Widening is incremental by
+# construction: the sparse patterns grow, and git fetches the blobs the new
+# patterns bring into the checkout.
+
+cmd_widen() {
+	family=$SNDOCS_DEFAULT_FAMILY
+	publications=''
+
+	while [ "$#" -gt 0 ]; do
+		case $1 in
+		--family)
+			[ "$#" -ge 2 ] || die '--family needs a value'
+			family=$2
+			shift 2
+			;;
+		--publication)
+			[ "$#" -ge 2 ] || die '--publication needs a value'
+			# Checked here, before the name is ever collected into a list
+			# that is later split on whitespace — validation behind an
+			# expansion is validation of the wrong thing.
+			assert_publication_name "$2"
+			publications="$publications$2
+"
+			shift 2
+			;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		*) die "unknown option for widen: $1" ;;
+		esac
+	done
+
+	assert_family_name "$family"
+	[ -n "$publications" ] || die 'widen needs at least one --publication'
+
+	dir=$(family_dir "$family")
+	assert_cache_exists "$dir" "$family"
+
+	# Widening is a use of the cache, so a stale cache is refreshed before it
+	# is extended. Pulling a publication down at a three-week-old commit,
+	# while the rest of the cache moved on, would make the cone internally
+	# inconsistent about which snapshot it holds.
+	age=$(cache_age "$dir" "$family")
+	if [ "$age" -ge "$SNDOCS_STALE_AFTER" ]; then
+		refresh_cache "$dir" "$family" "$age"
+	fi
+
+	available=$(upstream_publications "$dir/repo")
+	cached=$(cone_publications "$dir/repo")
+
+	# Everything is checked before anything is added, so a request naming one
+	# publication that does not exist leaves the cone exactly as it was.
+	# Every name here has already passed assert_publication_name, so the
+	# unquoted expansion has nothing left to split or glob.
+	wanted=''
+	for publication in $publications; do
+		# The distinction the whole skill rests on: a publication upstream
+		# does not carry is absent from the documentation, not merely
+		# absent from this cache.
+		contains_line "$available" "$publication" ||
+			die "publication '$publication' is not published upstream for family '$family'"
+		if contains_line "$cached" "$publication"; then
+			continue
+		fi
+		wanted="$wanted$publication
+"
+	done
+
+	if [ -z "$wanted" ]; then
+		printf 'sndocs: cache for %s already holds every publication asked for\n' \
+			"$family" >&2
+		return 0
+	fi
+
+	# The patterns as they stand. git unwinds its own failed `add`, but the
+	# guarantee that a failed widening leaves the cone where it was is this
+	# command's to keep, not git's to be trusted with.
+	previous=$(git -C "$dir/repo" sparse-checkout list)
+
+	set --
+	for publication in $wanted; do
+		set -- "$@" "/markdown/$publication/"
+	done
+
+	if ! git -C "$dir/repo" sparse-checkout add "$@" >&2; then
+		printf '%s\n' "$previous" |
+			git -C "$dir/repo" sparse-checkout set --no-cone --stdin >&2 || true
+		die "could not widen the cache for family '$family'"
+	fi
+
+	printf 'sndocs: cache for %s now holds %s\n' \
+		"$family" "$(printf '%s' "$wanted" | tr '\n' ' ')" >&2
+}
+
+# -------------------------------------------------------------------- refresh
+
+cmd_refresh() {
+	family=$SNDOCS_DEFAULT_FAMILY
+
+	while [ "$#" -gt 0 ]; do
+		case $1 in
+		--family)
+			[ "$#" -ge 2 ] || die '--family needs a value'
+			family=$2
+			shift 2
+			;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		*) die "unknown option for refresh: $1" ;;
+		esac
+	done
+
+	assert_family_name "$family"
+	dir=$(family_dir "$family")
+	assert_cache_exists "$dir" "$family"
+
+	refresh_cache "$dir" "$family" "$(cache_age "$dir" "$family")"
 }
 
 # --------------------------------------------------------------------- status
@@ -266,9 +568,7 @@ cmd_status() {
 	assert_family_name "$family"
 	dir=$(family_dir "$family")
 
-	if [ ! -d "$dir/repo/.git" ] || [ ! -f "$dir/snapshot" ]; then
-		die "no cache for family '$family'. Run: sndocs sync --family $family"
-	fi
+	assert_cache_exists "$dir" "$family"
 
 	commit=$(snapshot_read "$dir/snapshot" commit) ||
 		die "cache for family '$family' has no recorded commit. Remove $dir and sync again"
@@ -276,17 +576,35 @@ cmd_status() {
 		die "cache for family '$family' has no recorded fetch timestamp. Remove $dir and sync again"
 	upstream=$(snapshot_read "$dir/snapshot" upstream) || upstream=''
 
+	# Reported, never suppressed: an answer drawn from a stale cache is only
+	# attributable if the caller is told how old the cache is.
+	age=$(cache_age "$dir" "$family")
+	if [ "$age" -lt "$SNDOCS_STALE_AFTER" ]; then stale=false; else stale=true; fi
+
+	# status reports; it does not fetch. A stale cache is named as stale here
+	# and refreshed by sync, widen, or refresh — a command whose whole job is
+	# to say what the cache is should not change what the cache is.
+	publications=$(cone_publications "$dir/repo")
+	available=$(upstream_publications "$dir/repo")
+	publication_indexes=$(cone_publication_indexes "$dir/repo")
+
 	printf '{\n'
 	printf '  "family": "%s",\n' "$(json_escape "$family")"
 	printf '  "commit": "%s",\n' "$(json_escape "$commit")"
 	printf '  "fetched_at": "%s",\n' "$(json_escape "$fetched_at")"
+	printf '  "age_seconds": %s,\n' "$age"
+	printf '  "stale": %s,\n' "$stale"
+	printf '  "stale_after_seconds": %s,\n' "$SNDOCS_STALE_AFTER"
 	printf '  "upstream": "%s",\n' "$(json_escape "$upstream")"
 	printf '  "cache": "%s",\n' "$(json_escape "$dir/repo")"
 	printf '  "publications": ['
-	cone_publications "$dir/repo" | json_array_elements
+	json_array_elements "$publications"
+	printf '],\n'
+	printf '  "available_publications": ['
+	json_array_elements "$available"
 	printf '],\n'
 	printf '  "publication_indexes": ['
-	cone_publication_indexes "$dir/repo" | json_array_elements
+	json_array_elements "$publication_indexes"
 	printf ']\n'
 	printf '}\n'
 }
@@ -303,6 +621,8 @@ shift
 
 case $command in
 sync) cmd_sync "$@" ;;
+widen) cmd_widen "$@" ;;
+refresh) cmd_refresh "$@" ;;
 status) cmd_status "$@" ;;
 help | -h | --help) usage ;;
 *)

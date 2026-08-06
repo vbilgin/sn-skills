@@ -68,9 +68,61 @@ run_sndocs() {
 	RUN_ERR=$(cat "$SNDOCS_TEST_TMP/stderr")
 }
 
+# The clock a case runs against. Fixed rather than derived from the real one,
+# so an age assertion is exact instead of racing however long a git operation
+# happened to take.
+TEST_EPOCH=1800000000 # 2027-01-15T08:00:00Z
+DAY_SECONDS=86400
+
+# run_sndocs_at <seconds-after-TEST_EPOCH> <args...> — runs the executable at a
+# chosen point on that clock, for exercising the staleness window without
+# waiting a week. Sets the same RUN_* variables as run_sndocs.
+run_sndocs_at() {
+	_offset=$1
+	shift
+	SNDOCS_NOW=$((TEST_EPOCH + _offset))
+	export SNDOCS_NOW
+	run_sndocs "$@"
+	unset SNDOCS_NOW
+}
+
 # The upstream override, pointed at the fixture rather than the real upstream.
 fixture_upstream() {
 	printf 'file://%s\n' "$SNDOCS_TEST_FIXTURE"
+}
+
+# private_upstream — a per-case copy of the fixture, printed as an upstream
+# override. The suite's fixture is shared and must stay pristine; a case that
+# needs upstream to move on, or to become unreachable, mutates a copy.
+private_upstream() {
+	cp -R "$SNDOCS_TEST_FIXTURE" "$SNDOCS_TEST_TMP/upstream"
+	printf 'file://%s\n' "$SNDOCS_TEST_TMP/upstream"
+}
+
+# private_upstream_path — where private_upstream put its copy.
+private_upstream_path() {
+	printf '%s\n' "$SNDOCS_TEST_TMP/upstream"
+}
+
+# upstream_advance <family> — adds a commit to the private upstream copy, so a
+# refresh has something to pull.
+upstream_advance() {
+	_dir=$(private_upstream_path)
+	git -C "$_dir" checkout -q "$1"
+	printf '\n- [Login rules](login-rules.md)\n' \
+		>>"$_dir/markdown/platform-security/index.md"
+	git -C "$_dir" \
+		-c user.name='sndocs fixture' \
+		-c user.email='fixture@example.invalid' \
+		-c commit.gpgsign=false \
+		commit -qam 'docs: a later snapshot'
+	git -C "$_dir" rev-parse "$1"
+}
+
+# take_upstream_offline — removes the private upstream copy, so every later
+# git operation against it fails the way an unreachable network does.
+take_upstream_offline() {
+	rm -rf "$(private_upstream_path)"
 }
 
 # The cache location the sandbox HOME resolves to. Spelled out here rather

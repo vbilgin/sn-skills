@@ -68,6 +68,21 @@ upstream snapshot it came from and when it was taken. Owned exclusively by the S
 Which publications a Cache currently holds. Maintainer-facing only — never appears in output a
 user reads, where it is described as the publications that are cached.
 
+**Widening**:
+Extending a Cone to cover a publication the Cache does not hold, pulling only the new content
+into the clone already there. Never a re-clone.
+_Avoid_: expanding, growing, downloading
+
+**Snapshot**:
+Which upstream commit a Cache came from and when it was taken. What makes an answer
+attributable to a point in time rather than to "the docs".
+
+**Staleness window**:
+How old a Snapshot may be before use re-fetches it — seven days, against upstream's roughly
+monthly cadence. Past it a Cache is _stale_: it still answers, and its age is reported so the
+caller can stamp it on the answer. Stale is a property to disclose, never a reason to refuse.
+_Avoid_: expiry, TTL, cache invalidation
+
 **Heading index**:
 A derived, regenerable record of every cached topic and its headings, used to locate content
 without reading a Publication index. Contrast Publication index, which is upstream data to be

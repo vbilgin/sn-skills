@@ -48,20 +48,41 @@ bin/sndocs sync --family australia
 
 That creates a blobless, shallow, sparse clone at `${XDG_CACHE_HOME:-~/.cache}/sndocs/<family>`
 holding the API reference publication plus every publication index, and records the resolved
-commit and fetch timestamp alongside it. Syncing again while that cache is present is a no-op.
+commit and fetch timestamp alongside it. Syncing again while that cache is fresh is a no-op;
+syncing a cache older than seven days refreshes it first, so ordinary use keeps it current.
+
+```bash
+bin/sndocs widen --family australia --publication platform-security
+```
+
+That extends the cache to cover a publication it does not hold yet, pulling only the new
+content into the clone that is already there — refreshing first if the cache is stale, so the
+widened cone is coherent about which snapshot it holds. A publication upstream does not publish
+is refused by name, which is what keeps "not cached" distinguishable from "not documented."
+
+```bash
+bin/sndocs refresh --family australia
+```
+
+That fetches the family again now and records the new commit and fetch timestamp, so nobody
+waits for the staleness window after a release ships. If upstream cannot be reached, the
+existing cache is kept and its age reported — offline is a degraded mode, not a failure.
 
 ```bash
 bin/sndocs status --family australia
 ```
 
-That prints the family, commit, fetch timestamp, upstream, cache path, which publications are
-cached in full, and which publications have their index cached, as JSON on stdout. It exits
+That prints the family, commit, fetch timestamp, cache age and whether it is stale, the
+upstream, the cache path, which publications are cached in full, which publications upstream
+publishes, and which publications have their index cached, as JSON on stdout. It exits
 non-zero if that family has no cache. Naming what is cached — rather than reporting a bare
 yes — is what lets "not downloaded" be told apart from "not documented."
 
 `--upstream <repository>` (or `SNDOCS_UPSTREAM`) overrides the repository cloned from. It is a
 supported part of the interface, and it exists so the test suite can run against a small local
-fixture rather than downloading 269 MB of monthly-changing upstream content.
+fixture rather than downloading 269 MB of monthly-changing upstream content. `SNDOCS_NOW`
+overrides the current time in the same spirit, so the suite can cross the seven-day staleness
+window without waiting a week.
 
 Run `bin/sndocs help` for the full interface.
 

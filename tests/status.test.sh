@@ -41,10 +41,13 @@ vocabulary'
 }
 
 test_reports_the_snapshot_unchanged_across_invocations() {
-	sync_australia
-	run_sndocs status --family australia
+	# On a fixed clock: the cache's age is reported and genuinely does move,
+	# so only everything else is being held to not drifting.
+	run_sndocs_at 0 sync --family australia --upstream "$(fixture_upstream)"
+	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
+	run_sndocs_at 0 status --family australia
 	first=$RUN_OUT
-	run_sndocs status --family australia
+	run_sndocs_at 0 status --family australia
 	assert_equals "$first" "$RUN_OUT" 'the recorded snapshot should not drift between invocations'
 }
 
