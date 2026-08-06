@@ -1,0 +1,313 @@
+#!/bin/sh
+#
+# sndocs — maintains the Skill's local Cache of ServiceNow product
+# documentation, one Cache per Family.
+#
+# Dependency-free POSIX shell by design: no Node, no Python virtual
+# environment, no package manager. `git` and a POSIX userland are the whole
+# dependency list.
+#
+# The Cache is owned exclusively by this executable. It never reads, reuses,
+# validates, or mutates any clone the user already has, and it writes nothing
+# outside its own cache location.
+
+set -eu
+
+SNDOCS_DEFAULT_UPSTREAM='https://github.com/ServiceNow/ServiceNowDocs.git'
+SNDOCS_DEFAULT_FAMILY='australia'
+
+# Initial Cone: the API reference publication, plus every publication index.
+# Non-cone sparse patterns, because "every publication's index" is a glob
+# across directories and cone mode can only express directory prefixes.
+SNDOCS_INDEX_PATTERN='/markdown/*/index.md'
+
+usage() {
+	cat <<'EOF'
+sndocs — local cache of ServiceNow product documentation, one cache per family.
+
+Usage:
+  sndocs sync   [--family <family>] [--upstream <repository>]
+  sndocs status [--family <family>]
+  sndocs help
+
+Commands:
+  sync     Create the cache for a family if it does not exist: a blobless,
+           shallow, sparse clone holding the API reference publication and
+           every publication index. Records the resolved commit and the fetch
+           timestamp. A second sync on a fresh cache is a no-op.
+  status   Report the family, commit, fetch timestamp, and cached publications
+           as JSON on stdout. Exits non-zero if that family has no cache.
+
+Options:
+  --family <family>       Documentation family to work on (default: australia).
+  --upstream <repository> Upstream documentation repository to clone from.
+                          Defaults to $SNDOCS_UPSTREAM, else
+                          https://github.com/ServiceNow/ServiceNowDocs.git.
+                          This override exists so the test suite can point at a
+                          small local fixture instead of downloading 269 MB of
+                          monthly-changing upstream content. It is part of the
+                          supported interface.
+
+Environment:
+  SNDOCS_UPSTREAM   Default for --upstream.
+  XDG_CACHE_HOME    Cache location root (default: ~/.cache). The cache lives at
+                    $XDG_CACHE_HOME/sndocs/<family>.
+
+Documentation is fetched at runtime and never redistributed. Every cache
+records which upstream snapshot it came from, so a stale answer is
+attributable rather than mysterious.
+EOF
+}
+
+die() {
+	printf 'sndocs: %s\n' "$1" >&2
+	exit 1
+}
+
+# ------------------------------------------------------------------ locations
+
+cache_root() {
+	printf '%s/sndocs\n' "${XDG_CACHE_HOME:-$HOME/.cache}"
+}
+
+# A family name becomes both a branch name and a path segment, so it is
+# checked before either use — nothing outside the cache location may be
+# created, read, or modified, and a family name is the only user-supplied
+# component of that path.
+assert_family_name() {
+	case $1 in
+	'' | *[!a-zA-Z0-9._-]* | .* | *..*)
+		die "not a usable family name: '$1'"
+		;;
+	esac
+}
+
+family_dir() {
+	printf '%s/%s\n' "$(cache_root)" "$1"
+}
+
+# ------------------------------------------------------------------- snapshot
+#
+# The record of which upstream snapshot a Cache came from and when it was
+# taken. Line-oriented key=value; values never contain newlines.
+
+snapshot_write() {
+	# snapshot_write <file> <family> <upstream> <commit> <fetched_at>
+	cat >"$1" <<EOF
+family=$2
+upstream=$3
+commit=$4
+fetched_at=$5
+EOF
+}
+
+snapshot_read() {
+	# snapshot_read <file> <key> — prints the value, or fails.
+	while IFS='=' read -r _key _value; do
+		if [ "$_key" = "$2" ]; then
+			printf '%s\n' "$_value"
+			return 0
+		fi
+	done <"$1"
+	return 1
+}
+
+# --------------------------------------------------------------------- output
+
+json_escape() {
+	printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+}
+
+# Reads one item per line from stdin, writes them as JSON array elements.
+json_array_elements() {
+	_separator=''
+	while read -r _item; do
+		printf '%s"%s"' "$_separator" "$(json_escape "$_item")"
+		_separator=', '
+	done
+}
+
+# ----------------------------------------------------------------------- cone
+#
+# Read back from git's own sparse-checkout state and from the checkout itself,
+# rather than from a separate manifest — there is no second source of truth to
+# desynchronize. The Cone is what makes "not downloaded" distinguishable from
+# "not documented", so it has to be reported exactly.
+
+cone_publications() {
+	# cone_publications <repo> — publications held in full, one per line.
+	git -C "$1" sparse-checkout list | while read -r _pattern; do
+		case "$_pattern" in
+		/markdown/*/)
+			_rest=${_pattern#/markdown/}
+			printf '%s\n' "${_rest%/}"
+			;;
+		esac
+	done | LC_ALL=C sort
+}
+
+cone_publication_indexes() {
+	# cone_publication_indexes <repo> — publications whose index is checked
+	# out, one per line.
+	(
+		cd "$1" || return 0
+		for _index in markdown/*/index.md; do
+			[ -f "$_index" ] || continue
+			_rest=${_index#markdown/}
+			printf '%s\n' "${_rest%/index.md}"
+		done
+	) | LC_ALL=C sort
+}
+
+# ----------------------------------------------------------------------- sync
+
+cmd_sync() {
+	family=$SNDOCS_DEFAULT_FAMILY
+	upstream=${SNDOCS_UPSTREAM:-$SNDOCS_DEFAULT_UPSTREAM}
+
+	while [ "$#" -gt 0 ]; do
+		case $1 in
+		--family)
+			[ "$#" -ge 2 ] || die '--family needs a value'
+			family=$2
+			shift 2
+			;;
+		--upstream)
+			[ "$#" -ge 2 ] || die '--upstream needs a value'
+			upstream=$2
+			shift 2
+			;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		*) die "unknown option for sync: $1" ;;
+		esac
+	done
+
+	assert_family_name "$family"
+	dir=$(family_dir "$family")
+
+	# A fresh cache is left alone: syncing again must not re-clone. Widening
+	# the cone and refreshing a stale cache are separate concerns.
+	if [ -d "$dir/repo/.git" ] && [ -f "$dir/snapshot" ]; then
+		recorded=$(snapshot_read "$dir/snapshot" upstream) || recorded=''
+		# Provenance is the point of recording the snapshot, so a cache
+		# built from a different upstream is a mismatch to report, not a
+		# cache to hand back.
+		if [ "$recorded" != "$upstream" ]; then
+			die "cache for family '$family' came from $recorded, not $upstream. Remove $dir and sync again"
+		fi
+		printf 'sndocs: cache for %s is already present at %s\n' "$family" "$dir" >&2
+		return 0
+	fi
+
+	mkdir -p "$dir"
+
+	# Clone into a temporary path and move it into place, so an interrupted
+	# sync never leaves a half-built cache that later looks fresh.
+	staging=$(mktemp -d "$dir/.staging.XXXXXX")
+	trap 'rm -rf "$staging"' EXIT
+	trap 'rm -rf "$staging"; exit 130' INT
+	trap 'rm -rf "$staging"; exit 143' TERM
+
+	if ! git clone \
+		--filter=blob:none \
+		--no-checkout \
+		--depth 1 \
+		--single-branch \
+		--branch "$family" \
+		-- "$upstream" "$staging" >&2; then
+		rm -rf "$staging"
+		rmdir "$dir" 2>/dev/null || true
+		die "could not clone family '$family' from $upstream"
+	fi
+
+	git -C "$staging" sparse-checkout init --no-cone >/dev/null 2>&1 ||
+		die 'git is too old for sparse checkout; git 2.25 or newer is required'
+	git -C "$staging" sparse-checkout set \
+		"$SNDOCS_INDEX_PATTERN" \
+		'/markdown/api-reference/' >/dev/null
+	git -C "$staging" checkout "$family" >/dev/null 2>&1 ||
+		die "could not check out family '$family'"
+
+	commit=$(git -C "$staging" rev-parse HEAD)
+	fetched_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+	rm -rf "$dir/repo"
+	mv "$staging" "$dir/repo"
+	trap - EXIT INT TERM
+
+	snapshot_write "$dir/snapshot" "$family" "$upstream" "$commit" "$fetched_at"
+
+	printf 'sndocs: cached %s at %s (%s)\n' "$family" "$commit" "$fetched_at" >&2
+}
+
+# --------------------------------------------------------------------- status
+
+cmd_status() {
+	family=$SNDOCS_DEFAULT_FAMILY
+
+	while [ "$#" -gt 0 ]; do
+		case $1 in
+		--family)
+			[ "$#" -ge 2 ] || die '--family needs a value'
+			family=$2
+			shift 2
+			;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		*) die "unknown option for status: $1" ;;
+		esac
+	done
+
+	assert_family_name "$family"
+	dir=$(family_dir "$family")
+
+	if [ ! -d "$dir/repo/.git" ] || [ ! -f "$dir/snapshot" ]; then
+		die "no cache for family '$family'. Run: sndocs sync --family $family"
+	fi
+
+	commit=$(snapshot_read "$dir/snapshot" commit) ||
+		die "cache for family '$family' has no recorded commit. Remove $dir and sync again"
+	fetched_at=$(snapshot_read "$dir/snapshot" fetched_at) ||
+		die "cache for family '$family' has no recorded fetch timestamp. Remove $dir and sync again"
+	upstream=$(snapshot_read "$dir/snapshot" upstream) || upstream=''
+
+	printf '{\n'
+	printf '  "family": "%s",\n' "$(json_escape "$family")"
+	printf '  "commit": "%s",\n' "$(json_escape "$commit")"
+	printf '  "fetched_at": "%s",\n' "$(json_escape "$fetched_at")"
+	printf '  "upstream": "%s",\n' "$(json_escape "$upstream")"
+	printf '  "cache": "%s",\n' "$(json_escape "$dir/repo")"
+	printf '  "publications": ['
+	cone_publications "$dir/repo" | json_array_elements
+	printf '],\n'
+	printf '  "publication_indexes": ['
+	cone_publication_indexes "$dir/repo" | json_array_elements
+	printf ']\n'
+	printf '}\n'
+}
+
+# ----------------------------------------------------------------------- main
+
+[ "$#" -gt 0 ] || {
+	usage >&2
+	exit 2
+}
+
+command=$1
+shift
+
+case $command in
+sync) cmd_sync "$@" ;;
+status) cmd_status "$@" ;;
+help | -h | --help) usage ;;
+*)
+	printf 'sndocs: unknown command: %s\n\n' "$command" >&2
+	usage >&2
+	exit 2
+	;;
+esac

@@ -4,8 +4,9 @@ A portable agent skill that gives AI coding agents **family-correct, cited retri
 [`ServiceNow/ServiceNowDocs`](https://github.com/ServiceNow/ServiceNowDocs) — ServiceNow's
 ~49,000-file documentation repository published for LLM consumption.
 
-> **Status: v0.x, scaffold only.** The design is settled; the skill is not yet implemented.
-> Nothing here retrieves anything yet. Eval results will be published in this README as they
+> **Status: v0.x, in progress.** The design is settled. The cache executable can create and
+> report a cache; routing, retrieval, and the skill body are not built yet, so nothing
+> retrieves anything on your behalf yet. Eval results will be published in this README as they
 > land, and the cross-agent support claims below are marked untested until they are tested.
 
 ## Why
@@ -35,6 +36,44 @@ ServiceNow publishes its docs as markdown specifically for agents, and its READM
   runtime so it is never stale.
 - **Section-slices** large files. `c_GlideRecordAPI.md` is 208 KB with 161 headings; retrieving
   one method costs ~200 tokens instead of ~52,000.
+
+## Using the cache executable
+
+`bin/sndocs` is dependency-free POSIX shell. `git` and a POSIX userland are the whole
+dependency list — no Node, no Python virtual environment, no package manager.
+
+```bash
+bin/sndocs sync --family australia
+```
+
+That creates a blobless, shallow, sparse clone at `${XDG_CACHE_HOME:-~/.cache}/sndocs/<family>`
+holding the API reference publication plus every publication index, and records the resolved
+commit and fetch timestamp alongside it. Syncing again while that cache is present is a no-op.
+
+```bash
+bin/sndocs status --family australia
+```
+
+That prints the family, commit, fetch timestamp, upstream, cache path, which publications are
+cached in full, and which publications have their index cached, as JSON on stdout. It exits
+non-zero if that family has no cache. Naming what is cached — rather than reporting a bare
+yes — is what lets "not downloaded" be told apart from "not documented."
+
+`--upstream <repository>` (or `SNDOCS_UPSTREAM`) overrides the repository cloned from. It is a
+supported part of the interface, and it exists so the test suite can run against a small local
+fixture rather than downloading 269 MB of monthly-changing upstream content.
+
+Run `bin/sndocs help` for the full interface.
+
+## Tests
+
+```bash
+tests/run.sh
+```
+
+The suite runs offline. It builds a deterministic fixture repository — two family branches,
+realistic frontmatter, one oversized topic, one empty topic — and restricts git to the file
+protocol, so a test that reaches for the network fails loudly rather than downloading upstream.
 
 ## Correctness contracts
 
