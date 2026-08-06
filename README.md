@@ -20,7 +20,7 @@ ServiceNow publishes its docs as markdown specifically for agents, and its READM
 - **The indexes are too big to read.** `markdown/api-reference/index.md` is 2.2 MB. Reading it
   costs roughly 550,000 tokens. All 55 publication indexes together are 21 MB.
 - **GitHub code search can't help.** It indexes only the default branch, so it is structurally
-  incapable of searching the Zurich, Yokohama, or Xanadu release families.
+  incapable of searching the Zurich, Yokohama, or Xanadu families.
 - **Release family is a correctness problem.** Docs are branched per family. Most ServiceNow
   customers are not on the newest release, so answering a Zurich question from Australia docs
   is the single most likely way an agent produces confident, wrong, unfalsifiable output.
@@ -47,7 +47,7 @@ These are the reason the skill exists. Every one of them is an eval case.
    cannot misfire.
 5. An empty or truncated upstream file (a known, recurring upstream build defect) is reported
    as such, with the canonical URL — never as "not covered."
-6. When a release family's branch is deleted upstream, say plainly that the pinned release is
+6. When a family's branch is deleted upstream, say plainly that the pinned release is
    out of support. Xanadu will disappear.
 
 ## Scope

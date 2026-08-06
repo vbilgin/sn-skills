@@ -7,7 +7,7 @@ Read [README.md](README.md) for why this exists and what the correctness contrac
 
 Verified 2026-08-06 against the `australia` branch. Re-verify before relying on any of it.
 
-- Default branch is **`australia`**, not `main`. Branches are release families: `australia`,
+- Default branch is **`australia`**, not `main`. Branches are families: `australia`,
   `zurich`, `yokohama`, `xanadu`, plus unversioned `store`, `mobile`, `nofamily`, `other`.
   The oldest family branch is **deleted** when a new release goes GA.
 - 48,998 files / 269 MB on `australia`. Median file 3.3 KB; 293 files exceed 40 KB.
