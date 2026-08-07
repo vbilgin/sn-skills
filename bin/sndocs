@@ -44,6 +44,7 @@ Usage:
   sndocs widen   [--family <family>] --publication <publication> ...
   sndocs refresh [--family <family>]
   sndocs status  [--family <family>]
+  sndocs index   [--family <family>]
   sndocs family  [--family <family>]
   sndocs help
 
@@ -66,6 +67,14 @@ Commands:
   status   Report the family, commit, fetch timestamp, cache age, and both what
            is cached and what upstream publishes, as JSON on stdout. Exits
            non-zero if that family has no cache.
+  index    Walk every cached topic in one pass and write a heading index —
+           one greppable line per topic, holding its path, title, product
+           area, canonical URL, and every first- and second-level heading —
+           to the cache. A topic that is empty or whose frontmatter never
+           closes is flagged rather than silently skipped. Written inside the
+           cache, outside version control, and safe to re-run any time: it
+           reads whatever the cone currently holds and overwrites the index
+           in place.
 
 Options:
   --family <family>       Documentation family to work on. Overrides every
@@ -843,6 +852,152 @@ cmd_status() {
 	printf '}\n'
 }
 
+# ---------------------------------------------------------------------- index
+#
+# The heading index: one greppable record per cached topic, regenerated from
+# whatever the cone currently holds. Unlike a hand-maintained map, a stale
+# entry cannot exist — the whole file is rebuilt from the checkout in one
+# pass, never patched in place.
+#
+# One awk process handles every topic, reading filenames from a list file
+# rather than off argv, so the command line's length has nothing to do with
+# how many topics are cached. A record is plain `{...}` JSON, one per line:
+# grepping for a heading or a title needs no parser, only the text.
+
+# index_file <dir> — where a family's heading index lives: alongside the
+# snapshot, never inside the git working tree it describes, so a `reset
+# --hard` on refresh can never touch it.
+index_file() {
+	printf '%s/index.jsonl\n' "$1"
+}
+
+cmd_index() {
+	family=''
+
+	while [ "$#" -gt 0 ]; do
+		case $1 in
+		--family)
+			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
+			family=$2
+			shift 2
+			;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		*) die "unknown option for index: $1" ;;
+		esac
+	done
+
+	resolve_family "$family"
+	report_family
+	family=$FAMILY
+	dir=$(family_dir "$family")
+	assert_cache_exists "$dir" "$family"
+
+	repo="$dir/repo"
+	list=$(mktemp "$dir/.index-files.XXXXXX")
+	staging=$(mktemp "$dir/.index.XXXXXX")
+	trap 'rm -f "$list" "$staging"' EXIT INT TERM
+
+	(cd "$repo" && find markdown -type f -name '*.md' | LC_ALL=C sort) >"$list"
+
+	# One record per line: path, title, product area, canonical URL, a status
+	# of ok/empty/truncated/unreadable, and every level-1 and level-2 heading
+	# verbatim (marker included), so the heading text itself is what a grep
+	# matches. Headings are not looked for inside fenced code blocks, since a
+	# shell or YAML example's own comments are not the topic's structure.
+	#
+	# A topic missing a frontmatter field upstream gets an empty string for
+	# it rather than failing the whole run — a usable record beats none.
+	# "truncated" means the frontmatter block was opened but never closed:
+	# the shape a build that stopped mid-file leaves behind. "unreadable"
+	# means the file could not even be opened, which is a local problem —
+	# never the same status as a genuinely empty upstream file.
+	awk -v repo_prefix="$repo/" '
+	function esc(s) {
+		gsub(/\\/, "\\\\", s)
+		gsub(/"/, "\\\"", s)
+		return s
+	}
+	function trim(s) {
+		sub(/^[ \t]+/, "", s)
+		sub(/[ \t]+$/, "", s)
+		return s
+	}
+	{
+		relpath = $0
+		fname = repo_prefix relpath
+		title = ""
+		product_area = ""
+		canonical_url = ""
+		headings = ""
+		in_frontmatter = 0
+		in_code_fence = 0
+		nlines = 0
+
+		# rc distinguishes a file that opened and read zero lines (empty)
+		# from one that could not be opened at all (unreadable) — the two
+		# must never collapse into the same status, or a local read failure
+		# would be reported the way an upstream build defect is.
+		while ((rc = (getline line < fname)) > 0) {
+			nlines++
+			sub(/\r$/, "", line)
+			if (nlines == 1 && line == "---") {
+				in_frontmatter = 1
+				continue
+			}
+			if (in_frontmatter) {
+				if (line == "---") {
+					in_frontmatter = 0
+					continue
+				}
+				if (line ~ /^title:/) {
+					title = trim(substr(line, index(line, ":") + 1))
+				} else if (line ~ /^product_area:/) {
+					product_area = trim(substr(line, index(line, ":") + 1))
+				} else if (line ~ /^canonical_url:/) {
+					canonical_url = trim(substr(line, index(line, ":") + 1))
+				}
+				continue
+			}
+			if (line ~ /^(```|~~~)/) {
+				in_code_fence = !in_code_fence
+				continue
+			}
+			if (in_code_fence) {
+				continue
+			}
+			if (line ~ /^# / || line ~ /^## /) {
+				headings = headings (headings == "" ? "" : ",") "\"" esc(line) "\""
+			}
+		}
+		close(fname)
+
+		if (rc < 0) {
+			status = "unreadable"
+		} else if (nlines == 0) {
+			status = "empty"
+		} else if (in_frontmatter) {
+			status = "truncated"
+		} else {
+			status = "ok"
+		}
+
+		printf "{\"path\":\"%s\",\"title\":\"%s\",\"product_area\":\"%s\",\"canonical_url\":\"%s\",\"status\":\"%s\",\"headings\":[%s]}\n", \
+			esc(relpath), esc(title), esc(product_area), esc(canonical_url), status, headings
+	}
+	' "$list" >"$staging"
+
+	mv "$staging" "$(index_file "$dir")"
+	trap - EXIT INT TERM
+	rm -f "$list"
+
+	count=$(wc -l <"$(index_file "$dir")" | tr -d '[:space:]')
+	printf 'sndocs: indexed %s topics for %s at %s\n' \
+		"$count" "$family" "$(index_file "$dir")" >&2
+}
+
 # --------------------------------------------------------------------- family
 #
 # What every other command resolved before it did anything, on its own, so that
@@ -893,6 +1048,7 @@ sync) cmd_sync "$@" ;;
 widen) cmd_widen "$@" ;;
 refresh) cmd_refresh "$@" ;;
 status) cmd_status "$@" ;;
+index) cmd_index "$@" ;;
 family) cmd_family "$@" ;;
 help | -h | --help) usage ;;
 *)

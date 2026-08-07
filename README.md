@@ -5,10 +5,10 @@ A portable agent skill that gives AI coding agents **family-correct, cited retri
 ~49,000-file documentation repository published for LLM consumption.
 
 > **Status: v0.x, in progress.** The design is settled. The cache executable can create, report,
-> and maintain a cache, and resolve which family to use; routing, retrieval, and the skill body
-> are not built yet, so nothing retrieves anything on your behalf yet. Eval results will be
-> published in this README as they land, and the cross-agent support claims below are marked
-> untested until they are tested.
+> and maintain a cache, resolve which family to use, and generate a heading index over it;
+> routing, retrieval, and the skill body are not built yet, so nothing retrieves anything on your
+> behalf yet. Eval results will be published in this README as they land, and the cross-agent
+> support claims below are marked untested until they are tested.
 
 ## Why
 
@@ -101,6 +101,18 @@ upstream, the cache path, which publications are cached in full, which publicati
 publishes, and which publications have their index cached, as JSON on stdout. It exits
 non-zero if that family has no cache. Naming what is cached — rather than reporting a bare
 yes — is what lets "not downloaded" be told apart from "not documented."
+
+```bash
+bin/sndocs index --family australia
+```
+
+That walks every topic the cache currently holds in one pass and writes a heading index to the
+cache: one greppable line per topic, holding its path, title, product area, canonical URL, and
+every first- and second-level heading verbatim, including method-level headings inside large API
+reference files. A topic that is empty or whose frontmatter never closes is flagged as such,
+rather than reported as undocumented. The index is plain text on purpose — finding a heading
+needs a grep, not a parser — and it lives inside the cache, outside version control, rebuilt
+whole on every run so it can never rot out of sync with what the cone holds.
 
 `--upstream <repository>` (or `SNDOCS_UPSTREAM`) overrides the repository cloned from. It is a
 supported part of the interface, and it exists so the test suite can run against a small local
