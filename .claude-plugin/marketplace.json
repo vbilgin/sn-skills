@@ -1,0 +1,21 @@
+{
+  "name": "sndocs",
+  "owner": {
+    "name": "Victor Bilgin"
+  },
+  "description": "Family-correct, cited retrieval over ServiceNow product documentation, as an installable plugin.",
+  "plugins": [
+    {
+      "name": "sndocs",
+      "source": "./",
+      "description": "Family-correct, cited retrieval over ServiceNow product documentation (ServiceNow/ServiceNowDocs).",
+      "category": "documentation",
+      "keywords": [
+        "servicenow",
+        "documentation",
+        "glide",
+        "retrieval"
+      ]
+    }
+  ]
+}

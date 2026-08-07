@@ -7,10 +7,9 @@ A portable agent skill that gives AI coding agents **family-correct, cited retri
 > **Status: v0.x, in progress.** The design is settled. The cache executable can create, report,
 > and maintain a cache, resolve which family to use, and generate a heading index over it. The
 > skill definition, curated routing table, and retrieval procedure live at
-> [`skills/sndocs/SKILL.md`](skills/sndocs/SKILL.md), but there is no installable package yet —
-> no plugin manifest, no root agent-instructions file — so it isn't installable in an agent by
-> name yet. Eval results will be published in this README as they land, and the cross-agent
-> support claims below are marked untested until they are tested.
+> [`skills/sndocs/SKILL.md`](skills/sndocs/SKILL.md), and the skill is now installable by name —
+> see [Installation](#installation). Eval results will be published in this README as they land,
+> and the cross-agent support claims below are marked untested until they are tested.
 
 ## Why
 
@@ -39,6 +38,49 @@ ServiceNow publishes its docs as markdown specifically for agents, and its READM
   runtime so it is never stale.
 - **Section-slices** large files. `c_GlideRecordAPI.md` is 208 KB with 161 headings; retrieving
   one method costs ~200 tokens instead of ~52,000.
+
+## Installation
+
+The skill definition, the routing table, and `bin/sndocs` all live in this one repository and
+ship together — there is nothing to build and nothing to configure beyond optionally pinning a
+family (see [Using the cache executable](#using-the-cache-executable) below, or just let it
+default).
+
+**Claude Code:**
+
+```bash
+claude plugin marketplace add vbilgin/skill-sndocs
+claude plugin install sndocs@sndocs
+```
+
+Or, from inside a session: `/plugin marketplace add vbilgin/skill-sndocs` then
+`/plugin install sndocs@sndocs`.
+
+**Codex:**
+
+```bash
+codex plugin marketplace add vbilgin/skill-sndocs
+codex plugin add sndocs@sndocs
+```
+
+Codex reads the same `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` Claude
+Code does — verified against `codex` 0.147.0, see
+[`docs/adr/0004-packaging-shares-one-manifest.md`](docs/adr/0004-packaging-shares-one-manifest.md).
+There is no separate Codex manifest to fall out of sync with the Claude one.
+
+Both commands install a read-only, updatable copy of this repository; `bin/sndocs` and the skill
+definition travel together, and the skill locates its own executable at install time regardless
+of which directory you're working in when a ServiceNow question comes up.
+
+**Any other agent that reads `AGENTS.md`:** clone or vendor this repository somewhere the agent
+can read it, and its root [`AGENTS.md`](AGENTS.md) points at
+[`skills/sndocs/SKILL.md`](skills/sndocs/SKILL.md). This path has been exercised as a file layout
+(the plugin installs above materialize exactly this shape) but not against a live non-Claude,
+non-Codex agent — treat it as reference until someone reports it working end to end.
+
+Setup after install is one command with no language runtime, virtual environment, or package
+manager — `bin/sndocs sync --family <family>` clones a sparse, blobless checkout (measured: 1.4s)
+and answers the first question from it; nothing downloads the full 269 MB documentation set.
 
 ## Using the cache executable
 
@@ -162,8 +204,8 @@ the `mobile`, `nofamily`, and `other` branches; an MCP server.
 
 | Agent | Status |
 |---|---|
-| Claude Code | Primary target. Eval-gated. |
-| Codex | Manifest planned. **Untested** — the claim will be dropped rather than hedged if it goes unverified. |
+| Claude Code | Primary target. Installs from the manifest, and a headless `claude -p` session correctly fires the skill on a Glide API question — verified directly (`claude` 2.1.224). Actually running `bin/sndocs` from that session was blocked on Bash approval in this sandbox and not observed to succeed; path resolution and answer accuracy are eval-gated (see [#9](https://github.com/vbilgin/skill-sndocs/issues/9)). |
+| Codex | Manifest installs and the skill is discovered — verified against `codex` 0.147.0 (`plugin marketplace add`, `plugin add`, materialized `bin/sndocs` and `SKILL.md` intact). **Live triggering by a running Codex agent is untested** — this environment had no authenticated Codex session to exercise it. The claim will be corrected, not hedged, once someone runs it for real. |
 
 ## Provenance and independence
 

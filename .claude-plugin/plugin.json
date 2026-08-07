@@ -1,0 +1,20 @@
+{
+  "name": "sndocs",
+  "version": "0.1.0",
+  "description": "Family-correct, cited retrieval over ServiceNow product documentation (ServiceNow/ServiceNowDocs). Consults real docs before stating a Glide API signature or any version-dependent platform fact, and says so when the documentation has nothing.",
+  "author": {
+    "name": "Victor Bilgin"
+  },
+  "homepage": "https://github.com/vbilgin/skill-sndocs",
+  "repository": "https://github.com/vbilgin/skill-sndocs",
+  "license": "Apache-2.0",
+  "keywords": [
+    "servicenow",
+    "documentation",
+    "glide",
+    "retrieval"
+  ],
+  "skills": [
+    "./skills/sndocs"
+  ]
+}
