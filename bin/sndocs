@@ -14,7 +14,16 @@
 set -eu
 
 SNDOCS_DEFAULT_UPSTREAM='https://github.com/ServiceNow/ServiceNowDocs.git'
-SNDOCS_DEFAULT_FAMILY='australia'
+
+# The newest family as of the last time this file was touched. Used only when
+# nothing is configured, and never silently: falling back to it is a guess
+# about which release an instance runs, and the guess is warned about.
+SNDOCS_NEWEST_FAMILY='australia'
+
+# The project-level configuration file, looked for at and above the working
+# directory. Family is a property of the codebase rather than of the machine,
+# so this is the documented place to pin one.
+SNDOCS_PROJECT_CONFIG='.sndocs'
 
 # Initial Cone: the API reference publication, plus every publication index.
 # Non-cone sparse patterns, because "every publication's index" is a glob
@@ -35,9 +44,12 @@ Usage:
   sndocs widen   [--family <family>] --publication <publication> ...
   sndocs refresh [--family <family>]
   sndocs status  [--family <family>]
+  sndocs family  [--family <family>]
   sndocs help
 
 Commands:
+  family   Report the family every other command would work on, and where that
+           family came from, as JSON on stdout.
   sync     Create the cache for a family if it does not exist: a blobless,
            shallow, sparse clone holding the API reference publication and
            every publication index. Records the resolved commit and the fetch
@@ -56,7 +68,9 @@ Commands:
            non-zero if that family has no cache.
 
 Options:
-  --family <family>       Documentation family to work on (default: australia).
+  --family <family>       Documentation family to work on. Overrides every
+                          configured source. When omitted, the family is
+                          resolved as described below.
   --publication <name>    Publication to add to the cache. Repeat for several.
   --upstream <repository> Upstream documentation repository to clone from.
                           Defaults to $SNDOCS_UPSTREAM, else
@@ -66,6 +80,25 @@ Options:
                           monthly-changing upstream content. It is part of the
                           supported interface.
 
+Family resolution, highest wins:
+  1. --family on the invocation.
+  2. The nearest .sndocs file at or above the working directory. This is the
+     documented place to pin a family: family is a property of the codebase,
+     not of the machine, so committing it means teammates and agents inherit
+     it, and changing directory between client repositories changes the
+     documentation set with no other action.
+  3. $XDG_CONFIG_HOME/sndocs/config, for a machine-wide default.
+  4. The newest family, with a warning that no family was configured.
+
+  Both files are key=value lines; `#` starts a comment. The key is `family`.
+  Every command reports which family it resolved and where that came from.
+
+  A family whose branch upstream no longer publishes is reported as out of
+  support and exits non-zero. Upstream deletes the oldest family when a new
+  release reaches general availability, so this will happen to a pinned family
+  eventually. It is a fact about the instance's release, never a reason to
+  quietly answer from a different family.
+
 Environment:
   SNDOCS_UPSTREAM   Default for --upstream.
   SNDOCS_NOW        Unix timestamp to treat as the current time. Exists so the
@@ -73,6 +106,8 @@ Environment:
                     waiting a week. Part of the supported interface.
   XDG_CACHE_HOME    Cache location root (default: ~/.cache). The cache lives at
                     $XDG_CACHE_HOME/sndocs/<family>.
+  XDG_CONFIG_HOME   Configuration root (default: ~/.config). The user-level
+                    configuration lives at $XDG_CONFIG_HOME/sndocs/config.
 
 Documentation is fetched at runtime and never redistributed. Every cache
 records which upstream snapshot it came from, so a stale answer is
@@ -85,10 +120,22 @@ die() {
 	exit 1
 }
 
+note() {
+	printf 'sndocs: %s\n' "$1" >&2
+}
+
 # ------------------------------------------------------------------ locations
 
 cache_root() {
 	printf '%s/sndocs\n' "${XDG_CACHE_HOME:-$HOME/.cache}"
+}
+
+config_root() {
+	printf '%s/sndocs\n' "${XDG_CONFIG_HOME:-$HOME/.config}"
+}
+
+user_config_file() {
+	printf '%s/config\n' "$(config_root)"
 }
 
 # Family and publication names become branch names, path segments, and sparse
@@ -96,24 +143,179 @@ cache_root() {
 # cache location may be created, read, or modified, and these names are the
 # only user-supplied components of that path.
 assert_path_segment() {
-	# assert_path_segment <kind> <name>
+	# assert_path_segment <kind> <name> <where it came from, or empty>
 	case $2 in
 	'' | *[!a-zA-Z0-9._-]* | .* | *..*)
+		# Named with its origin when it has one: a value that came from a
+		# configuration file is only fixable if the file is named.
+		if [ -n "$3" ]; then
+			die "not a usable $1 name: '$2' in $3"
+		fi
 		die "not a usable $1 name: '$2'"
 		;;
 	esac
 }
 
 assert_family_name() {
-	assert_path_segment family "$1"
+	# assert_family_name <name> [<where it came from>]
+	assert_path_segment family "$1" "${2:-}"
 }
 
 assert_publication_name() {
-	assert_path_segment publication "$1"
+	assert_path_segment publication "$1" ''
 }
 
 family_dir() {
 	printf '%s/%s\n' "$(cache_root)" "$1"
+}
+
+# ------------------------------------------------------ key=value files
+#
+# Three files in this design are line-oriented key=value: the Snapshot, which
+# this executable writes, and the two configuration files, which people write.
+# One reader serves all three, tolerant enough for the handwritten ones.
+
+# trim <text> — the text without surrounding blanks.
+trim() {
+	_trimmed=$1
+	_trimmed=${_trimmed#"${_trimmed%%[![:blank:]]*}"}
+	_trimmed=${_trimmed%"${_trimmed##*[![:blank:]]}"}
+	printf '%s\n' "$_trimmed"
+}
+
+# kv_read <file> <key> — prints the value, or fails if the key is absent.
+# Blank lines and `#` comments are skipped. A value may itself contain `=`,
+# because upstream URLs do.
+kv_read() {
+	[ -f "$1" ] || return 1
+	# `|| [ -n "$_line" ]` so a final line without a trailing newline is still
+	# read — a handwritten file often has none.
+	while IFS= read -r _line || [ -n "$_line" ]; do
+		_line=$(trim "$_line")
+		case $_line in
+		'' | '#'*) continue ;;
+		*'='*) ;;
+		*) continue ;;
+		esac
+		if [ "$(trim "${_line%%=*}")" = "$2" ]; then
+			trim "${_line#*=}"
+			return 0
+		fi
+	done <"$1"
+	return 1
+}
+
+# ------------------------------------------------------------ family resolution
+#
+# Which Family every other command works on, and where that came from.
+# Precedence, highest first: an explicit argument, the project configuration
+# file, the user configuration file, then the newest family with a warning.
+#
+# The project file is the documented default because Family is a property of
+# the codebase rather than of the machine — an update-set repository for a
+# Zurich client is Zurich permanently, and committing that fact means teammates
+# and agents inherit it without being told. A consultant moving between client
+# repositories changes documentation sets by changing directory.
+
+FAMILY=''
+FAMILY_SOURCE=''
+FAMILY_SOURCE_PATH=''
+
+# find_project_config — the nearest project configuration file at or above the
+# working directory, or non-zero if there is none.
+find_project_config() {
+	_dir=$(pwd)
+	while :; do
+		if [ -f "$_dir/$SNDOCS_PROJECT_CONFIG" ]; then
+			printf '%s/%s\n' "${_dir%/}" "$SNDOCS_PROJECT_CONFIG"
+			return 0
+		fi
+		[ "$_dir" != '/' ] || return 1
+		_dir=$(dirname "$_dir")
+	done
+}
+
+# resolve_family [<explicit family>] — sets FAMILY, FAMILY_SOURCE and
+# FAMILY_SOURCE_PATH. A configured family is validated here, in the shell that
+# can still die: a bad value in a file is fatal and names the file, never
+# quietly skipped in favour of the next source.
+resolve_family() {
+	FAMILY_SOURCE_PATH=''
+
+	if [ -n "${1:-}" ]; then
+		assert_family_name "$1"
+		FAMILY=$1
+		FAMILY_SOURCE=argument
+		return 0
+	fi
+
+	if _file=$(find_project_config); then
+		if _value=$(kv_read "$_file" family); then
+			# The key is present, so a bad or empty value is this file's
+			# mistake to report — never a reason to fall through to the next
+			# source as though it had said nothing.
+			assert_family_name "$_value" "$_file"
+			FAMILY=$_value
+			FAMILY_SOURCE=project
+			FAMILY_SOURCE_PATH=$_file
+			return 0
+		fi
+	fi
+
+	_file=$(user_config_file)
+	if _value=$(kv_read "$_file" family); then
+		assert_family_name "$_value" "$_file"
+		FAMILY=$_value
+		FAMILY_SOURCE=user
+		FAMILY_SOURCE_PATH=$_file
+		return 0
+	fi
+
+	FAMILY=$SNDOCS_NEWEST_FAMILY
+	FAMILY_SOURCE=default
+}
+
+# report_family — says which family is being worked on and where that came
+# from, so no answer is ever attributed to a family nobody chose.
+report_family() {
+	case $FAMILY_SOURCE in
+	argument)
+		note "family $FAMILY, from --family"
+		;;
+	project | user)
+		note "family $FAMILY, from $FAMILY_SOURCE_PATH"
+		;;
+	default)
+		note "no family configured; using the newest family '$FAMILY'. Pin one with 'family=<family>' in $SNDOCS_PROJECT_CONFIG at the root of this repository"
+		;;
+	esac
+}
+
+# ------------------------------------------------------------- out of support
+#
+# Upstream deletes the oldest Family branch when a new release reaches general
+# availability, so a pinned Family eventually ceases to exist. That is
+# actionable information about the release an instance runs — reported and
+# fatal, never papered over by answering from a Family nobody chose.
+
+# upstream_publishes_no_branch <upstream> <family> — true only when upstream
+# can be reached and publishes no branch for the family. False when upstream
+# cannot be reached: offline is a degraded mode and says nothing about what is
+# still published, and telling someone their release is out of support because
+# their network dropped would be worse than saying nothing.
+upstream_publishes_no_branch() {
+	_refs=$(git ls-remote --heads -- "$1" "refs/heads/$2" 2>/dev/null) || return 1
+	[ -z "$_refs" ]
+}
+
+die_out_of_support() {
+	# die_out_of_support <upstream> <family>
+	die "family '$2' is out of support: $1 no longer publishes a branch for it. ServiceNow withdraws the oldest family when a new release reaches general availability. Pin a supported family, or ask about the release the instance actually runs"
+}
+
+die_not_published() {
+	# die_not_published <upstream> <family>
+	die "family '$2' is not published by $1: there is no branch for it"
 }
 
 # ----------------------------------------------------------------------- time
@@ -189,14 +391,9 @@ EOF
 }
 
 snapshot_read() {
-	# snapshot_read <file> <key> — prints the value, or fails.
-	while IFS='=' read -r _key _value; do
-		if [ "$_key" = "$2" ]; then
-			printf '%s\n' "$_value"
-			return 0
-		fi
-	done <"$1"
-	return 1
+	# snapshot_read <file> <key> — prints the value, or fails. A Snapshot is
+	# one of the key=value files kv_read handles.
+	kv_read "$1" "$2"
 }
 
 # --------------------------------------------------------------------- output
@@ -320,6 +517,17 @@ refresh_cache() {
 		printf 'sndocs: refreshed %s to %s (%s)\n' \
 			"$2" "$_commit" "$_fetched_at" >&2
 	else
+		# A fetch fails both when upstream is unreachable and when the family
+		# has been withdrawn. The second is not a degraded mode to shrug off:
+		# a cache nobody can refresh again, answered from silently, is exactly
+		# the confident-and-wrong output this project exists to prevent. There
+		# is no typo to consider here — the cache is proof this family was
+		# published once.
+		_upstream=$(snapshot_read "$1/snapshot" upstream) || _upstream=''
+		if [ -n "$_upstream" ] && upstream_publishes_no_branch "$_upstream" "$2"; then
+			die_out_of_support "$_upstream" "$2"
+		fi
+
 		printf 'sndocs: could not reach upstream; keeping the cache for %s, %s\n' \
 			"$2" "$(age_human "$3")" >&2
 	fi
@@ -328,13 +536,13 @@ refresh_cache() {
 # ----------------------------------------------------------------------- sync
 
 cmd_sync() {
-	family=$SNDOCS_DEFAULT_FAMILY
+	family=''
 	upstream=${SNDOCS_UPSTREAM:-$SNDOCS_DEFAULT_UPSTREAM}
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
 		--family)
-			[ "$#" -ge 2 ] || die '--family needs a value'
+			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
 			family=$2
 			shift 2
 			;;
@@ -351,7 +559,9 @@ cmd_sync() {
 		esac
 	done
 
-	assert_family_name "$family"
+	resolve_family "$family"
+	report_family
+	family=$FAMILY
 	dir=$(family_dir "$family")
 
 	# A cache inside the staleness window is left alone: syncing again must
@@ -395,6 +605,22 @@ cmd_sync() {
 		-- "$upstream" "$staging" >&2; then
 		rm -rf "$staging"
 		rmdir "$dir" 2>/dev/null || true
+		# Asked only once the clone has failed, so the ordinary path costs one
+		# network round trip rather than two — and so the answer to "why did
+		# that fail" distinguishes a withdrawn family from an unreachable
+		# upstream instead of blaming the network for both.
+		if upstream_publishes_no_branch "$upstream" "$family"; then
+			# A family that was pinned, or fallen back to, is one nobody just
+			# typed: it was chosen because an instance runs that release, so
+			# its absence means the release is out of support. A family named
+			# on the command line and published nowhere is likelier a typo,
+			# and telling someone to migrate their instance over a misspelling
+			# would be its own confidently-wrong answer.
+			if [ "$FAMILY_SOURCE" = argument ]; then
+				die_not_published "$upstream" "$family"
+			fi
+			die_out_of_support "$upstream" "$family"
+		fi
 		die "could not clone family '$family' from $upstream"
 	fi
 
@@ -428,13 +654,13 @@ cmd_sync() {
 # patterns bring into the checkout.
 
 cmd_widen() {
-	family=$SNDOCS_DEFAULT_FAMILY
+	family=''
 	publications=''
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
 		--family)
-			[ "$#" -ge 2 ] || die '--family needs a value'
+			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
 			family=$2
 			shift 2
 			;;
@@ -456,7 +682,9 @@ cmd_widen() {
 		esac
 	done
 
-	assert_family_name "$family"
+	resolve_family "$family"
+	report_family
+	family=$FAMILY
 	[ -n "$publications" ] || die 'widen needs at least one --publication'
 
 	dir=$(family_dir "$family")
@@ -521,12 +749,12 @@ cmd_widen() {
 # -------------------------------------------------------------------- refresh
 
 cmd_refresh() {
-	family=$SNDOCS_DEFAULT_FAMILY
+	family=''
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
 		--family)
-			[ "$#" -ge 2 ] || die '--family needs a value'
+			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
 			family=$2
 			shift 2
 			;;
@@ -538,7 +766,9 @@ cmd_refresh() {
 		esac
 	done
 
-	assert_family_name "$family"
+	resolve_family "$family"
+	report_family
+	family=$FAMILY
 	dir=$(family_dir "$family")
 	assert_cache_exists "$dir" "$family"
 
@@ -548,12 +778,12 @@ cmd_refresh() {
 # --------------------------------------------------------------------- status
 
 cmd_status() {
-	family=$SNDOCS_DEFAULT_FAMILY
+	family=''
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
 		--family)
-			[ "$#" -ge 2 ] || die '--family needs a value'
+			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
 			family=$2
 			shift 2
 			;;
@@ -565,7 +795,9 @@ cmd_status() {
 		esac
 	done
 
-	assert_family_name "$family"
+	resolve_family "$family"
+	report_family
+	family=$FAMILY
 	dir=$(family_dir "$family")
 
 	assert_cache_exists "$dir" "$family"
@@ -590,6 +822,8 @@ cmd_status() {
 
 	printf '{\n'
 	printf '  "family": "%s",\n' "$(json_escape "$family")"
+	printf '  "family_source": "%s",\n' "$(json_escape "$FAMILY_SOURCE")"
+	printf '  "family_source_path": "%s",\n' "$(json_escape "$FAMILY_SOURCE_PATH")"
 	printf '  "commit": "%s",\n' "$(json_escape "$commit")"
 	printf '  "fetched_at": "%s",\n' "$(json_escape "$fetched_at")"
 	printf '  "age_seconds": %s,\n' "$age"
@@ -609,6 +843,41 @@ cmd_status() {
 	printf '}\n'
 }
 
+# --------------------------------------------------------------------- family
+#
+# What every other command resolved before it did anything, on its own, so that
+# "which family am I about to get" is answerable without a cache, without the
+# network, and without running something that changes state.
+
+cmd_family() {
+	family=''
+
+	while [ "$#" -gt 0 ]; do
+		case $1 in
+		--family)
+			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
+			family=$2
+			shift 2
+			;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		*) die "unknown option for family: $1" ;;
+		esac
+	done
+
+	resolve_family "$family"
+	report_family
+
+	printf '{\n'
+	printf '  "family": "%s",\n' "$(json_escape "$FAMILY")"
+	printf '  "source": "%s",\n' "$(json_escape "$FAMILY_SOURCE")"
+	printf '  "source_path": "%s",\n' "$(json_escape "$FAMILY_SOURCE_PATH")"
+	printf '  "cache": "%s"\n' "$(json_escape "$(family_dir "$FAMILY")/repo")"
+	printf '}\n'
+}
+
 # ----------------------------------------------------------------------- main
 
 [ "$#" -gt 0 ] || {
@@ -624,6 +893,7 @@ sync) cmd_sync "$@" ;;
 widen) cmd_widen "$@" ;;
 refresh) cmd_refresh "$@" ;;
 status) cmd_status "$@" ;;
+family) cmd_family "$@" ;;
 help | -h | --help) usage ;;
 *)
 	printf 'sndocs: unknown command: %s\n\n' "$command" >&2

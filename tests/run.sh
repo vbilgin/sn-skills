@@ -28,10 +28,12 @@ export GIT_ALLOW_PROTOCOL GIT_TERMINAL_PROMPT
 work=$(mktemp -d "${TMPDIR:-/tmp}/sndocs-suite.XXXXXX")
 trap 'rm -rf "$work"' EXIT INT TERM
 
-# The suite's own git operations must not read the developer's global config.
+# The suite's own git operations must not read the developer's global config,
+# and family resolution must not read the developer's own sndocs configuration.
 HOME="$work/suite-home"
+XDG_CONFIG_HOME="$work/suite-home/.config"
 mkdir -p "$HOME"
-export HOME
+export HOME XDG_CONFIG_HOME
 
 . "$SNDOCS_TEST_LIB/fixture.sh"
 

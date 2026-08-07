@@ -35,6 +35,12 @@ A ServiceNow product release, as run by an instance. Distinct from Family: a Fam
 documentation, a Release is software. An instance runs a Release; a question is answered from a
 Family.
 
+**Out of support**:
+A Family whose branch upstream no longer publishes, because ServiceNow withdrew it when a newer
+release reached general availability. Reported as a fact about the Release an instance runs, and
+fatal — never a reason to answer from a different Family.
+_Avoid_: deleted, removed, unsupported, EOL
+
 **Unfamilied source**:
 Documentation published outside the versioned families, currently the Store content. Topics
 from an unfamilied source are cited without a family and marked as unversioned.
@@ -63,6 +69,16 @@ content.
 **Cache**:
 The Skill's own local copy of one Family's documentation, together with the record of which
 upstream snapshot it came from and when it was taken. Owned exclusively by the Skill.
+
+**Family resolution**:
+Deciding which Family a command works on, from the invocation, the project configuration, the
+user configuration, or the newest Family as a warned-about fallback. Always reports both the
+Family it chose and the source it came from.
+
+**Pinned family**:
+A Family fixed by configuration rather than named on the invocation — a commitment about which
+Release an instance runs, which is why its withdrawal upstream is reported as Out of support
+rather than treated as a mistyped name.
 
 **Cone**:
 Which publications a Cache currently holds. Maintainer-facing only — never appears in output a

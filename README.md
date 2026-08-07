@@ -4,10 +4,11 @@ A portable agent skill that gives AI coding agents **family-correct, cited retri
 [`ServiceNow/ServiceNowDocs`](https://github.com/ServiceNow/ServiceNowDocs) — ServiceNow's
 ~49,000-file documentation repository published for LLM consumption.
 
-> **Status: v0.x, in progress.** The design is settled. The cache executable can create and
-> report a cache; routing, retrieval, and the skill body are not built yet, so nothing
-> retrieves anything on your behalf yet. Eval results will be published in this README as they
-> land, and the cross-agent support claims below are marked untested until they are tested.
+> **Status: v0.x, in progress.** The design is settled. The cache executable can create, report,
+> and maintain a cache, and resolve which family to use; routing, retrieval, and the skill body
+> are not built yet, so nothing retrieves anything on your behalf yet. Eval results will be
+> published in this README as they land, and the cross-agent support claims below are marked
+> untested until they are tested.
 
 ## Why
 
@@ -69,10 +70,33 @@ waits for the staleness window after a release ships. If upstream cannot be reac
 existing cache is kept and its age reported — offline is a degraded mode, not a failure.
 
 ```bash
+bin/sndocs family
+```
+
+That prints the family every other command would work on and where that family came from, as
+JSON on stdout. Resolution, highest wins: `--family` on the invocation; then the nearest
+`.sndocs` file at or above the working directory; then `$XDG_CONFIG_HOME/sndocs/config`; then
+the newest family, with a warning that no family was configured. Both files are `key=value`
+lines with `#` comments, and the key is `family`.
+
+The project file is the documented place to pin one, because family is a property of the
+codebase rather than of the machine — an update-set repository for a Zurich client is Zurich
+permanently, and committing `family=zurich` means teammates and agents inherit it without being
+told. A consultant moving between client repositories changes documentation sets by changing
+directory.
+
+Upstream deletes the oldest family branch when a new release reaches general availability, so a
+pinned family eventually ceases to exist. When that happens, every command stops and reports
+that the release is out of support, exiting non-zero. That is actionable information about the
+instance, and specifically not something to paper over by quietly answering from the newest
+family.
+
+```bash
 bin/sndocs status --family australia
 ```
 
-That prints the family, commit, fetch timestamp, cache age and whether it is stale, the
+That prints the family and where it was resolved from, the commit, fetch timestamp, cache age
+and whether it is stale, the
 upstream, the cache path, which publications are cached in full, which publications upstream
 publishes, and which publications have their index cached, as JSON on stdout. It exits
 non-zero if that family has no cache. Naming what is cached — rather than reporting a bare

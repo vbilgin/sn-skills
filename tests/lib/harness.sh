@@ -119,6 +119,13 @@ upstream_advance() {
 	git -C "$_dir" rev-parse "$1"
 }
 
+# upstream_delete_family <family> — removes a family branch from the private
+# upstream copy, the way upstream deletes the oldest family when a new release
+# reaches general availability.
+upstream_delete_family() {
+	git -C "$(private_upstream_path)" branch -q -D "$1"
+}
+
 # take_upstream_offline — removes the private upstream copy, so every later
 # git operation against it fails the way an unreachable network does.
 take_upstream_offline() {
@@ -130,6 +137,42 @@ take_upstream_offline() {
 # test instead of silently moving what the tests assert against.
 cache_root() {
 	printf '%s/sndocs\n' "$XDG_CACHE_HOME"
+}
+
+# ---------------------------------------------------------- family resolution
+
+# write_user_config <line...> — the user-level configuration file, at the
+# location the sandbox XDG_CONFIG_HOME resolves to. Spelled out here rather
+# than asked of the executable, for the same reason as cache_root.
+write_user_config() {
+	mkdir -p "$XDG_CONFIG_HOME/sndocs"
+	printf '%s\n' "$@" >"$XDG_CONFIG_HOME/sndocs/config"
+}
+
+# write_project_config <dir> <line...> — a project-level configuration file in
+# a working directory, the way a repository commits one.
+write_project_config() {
+	_dir=$1
+	shift
+	mkdir -p "$_dir"
+	printf '%s\n' "$@" >"$_dir/.sndocs"
+}
+
+# run_family <args...> — resolves the family from wherever the case has left
+# the working directory. Sets the usual RUN_* variables, so both the resolved
+# family and the source it came from can be asserted on.
+run_family() {
+	run_sndocs family "$@"
+	assert_equals 0 "$RUN_STATUS" "family should exit zero: $RUN_ERR"
+}
+
+# assert_resolves_to <family> <args...>
+assert_resolves_to() {
+	_expected=$1
+	shift
+	run_family "$@"
+	assert_equals "$_expected" "$(json_field "$RUN_OUT" family)" \
+		'the wrong family was resolved'
 }
 
 # json_field <json> <key> — reads one scalar field without a JSON dependency.
@@ -169,7 +212,8 @@ run_tests() {
 		(
 			HOME="$SNDOCS_TEST_TMP/home"
 			XDG_CACHE_HOME="$SNDOCS_TEST_TMP/home/.cache"
-			export HOME XDG_CACHE_HOME
+			XDG_CONFIG_HOME="$SNDOCS_TEST_TMP/home/.config"
+			export HOME XDG_CACHE_HOME XDG_CONFIG_HOME
 			mkdir -p "$HOME" "$SNDOCS_TEST_TMP/cwd"
 			cd "$SNDOCS_TEST_TMP/cwd" || exit 1
 			"$_case"
