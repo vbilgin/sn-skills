@@ -1,0 +1,31 @@
+# Curated concept -> publication routing table for skills/sndocs/SKILL.md.
+#
+# One row per high-traffic platform concept. Columns, tab-separated:
+#   concept       lowercase, hyphenated; the term the skill matches a query
+#                 against after synonym normalization
+#   publication   the directory under markdown/ that is authoritative for
+#                 this concept — the judgment a heading index can't supply,
+#                 since several publications may mention a concept in passing
+#   entry_path    a real file, verified against the australia branch on
+#                 2026-08-07, relative to markdown/<publication>/ — read this
+#                 first, by heading, never whole. Never a publication's
+#                 index.md: SKILL.md forbids reading that file at all.
+#   note          why this publication and not a plausible-looking other one
+#
+# Diffable on purpose: this is data an upstream restructure should break
+# loudly (see #8), not prose that quietly drifts out of date. A row that
+# never changes an eval outcome is a row to delete, not to keep for symmetry.
+#
+# concept	publication	entry_path	note
+access-control-rule	platform-security	access-control/access-control-rules.md	platform-security is authoritative for ACL rule creation and evaluation; application-development's "ACL access checks" material covers a different, dev-facing angle and is not the entry point
+business-rule	build-workflows	business-rules-classic/c_BusinessRules.md	server-side Business Rules live under build-workflows, not application-development, despite being written in a script editor
+automated-test-framework	application-development	automated-test-framework-atf/atf-landing-page.md	ATF is filed under application-development, not release-notes or a testing-specific publication
+update-set	application-development	system-update-sets/system-update-sets.md	update sets are dev-lifecycle tooling, filed under application-development rather than platform-administration
+service-portal	platform-user-interface	service-portal/c_ServicePortal.md	Service Portal (pages, widgets) is UI, not build-workflows, despite widgets containing server-side script
+flow-designer	build-workflows	build-workflows.md	Flow Designer and legacy Workflow both live under build-workflows
+notification	platform-administration	c_EmailNotifications.md	email/SMS notification configuration is filed under platform-administration, not integrate-applications
+
+# Glide* API questions deliberately have no row here: api-reference is the sole publication that
+# could plausibly answer them, it's already in the default cone, and its entry point is the
+# generated heading index (grep for the method heading), never markdown/api-reference/index.md —
+# that file is the one this table exists to keep nobody from being routed toward reading whole.

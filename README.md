@@ -5,9 +5,11 @@ A portable agent skill that gives AI coding agents **family-correct, cited retri
 ~49,000-file documentation repository published for LLM consumption.
 
 > **Status: v0.x, in progress.** The design is settled. The cache executable can create, report,
-> and maintain a cache, resolve which family to use, and generate a heading index over it;
-> routing, retrieval, and the skill body are not built yet, so nothing retrieves anything on your
-> behalf yet. Eval results will be published in this README as they land, and the cross-agent
+> and maintain a cache, resolve which family to use, and generate a heading index over it. The
+> skill definition, curated routing table, and retrieval procedure live at
+> [`skills/sndocs/SKILL.md`](skills/sndocs/SKILL.md), but there is no installable package yet —
+> no plugin manifest, no root agent-instructions file — so it isn't installable in an agent by
+> name yet. Eval results will be published in this README as they land, and the cross-agent
 > support claims below are marked untested until they are tested.
 
 ## Why
