@@ -13,8 +13,9 @@
 #   note          why this publication and not a plausible-looking other one
 #
 # Diffable on purpose: this is data an upstream restructure should break
-# loudly (see #8), not prose that quietly drifts out of date. A row that
-# never changes an eval outcome is a row to delete, not to keep for symmetry.
+# loudly — checked by `bin/sndocs verify` — not prose that quietly drifts out
+# of date. A row that never changes an eval outcome is a row to delete, not
+# to keep for symmetry.
 #
 # concept	publication	entry_path	note
 access-control-rule	platform-security	access-control/access-control-rules.md	platform-security is authoritative for ACL rule creation and evaluation; application-development's "ACL access checks" material covers a different, dev-facing angle and is not the entry point

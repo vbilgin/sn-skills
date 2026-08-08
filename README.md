@@ -158,11 +158,28 @@ rather than reported as undocumented. The index is plain text on purpose — fin
 needs a grep, not a parser — and it lives inside the cache, outside version control, rebuilt
 whole on every run so it can never rot out of sync with what the cone holds.
 
+```bash
+bin/sndocs verify --family australia
+```
+
+That diffs [`skills/sndocs/routing.tsv`](skills/sndocs/routing.tsv) — the curated concept→publication
+table `SKILL.md` routes through — against the upstream structure the cache already holds, and
+reports every publication a row names that no longer exists, every entry topic that has moved or
+disappeared, and every entry topic no longer linked from its own publication's index, as JSON on
+stdout. It exits non-zero when it finds any discrepancy, zero when clean, so continuous
+integration can consume it later without a rewrite — scheduling that CI run is out of scope here.
+It costs no network round trip per entry: a blobless clone carries every tree even outside the
+checked-out cone, and every publication's index is part of the initial cone regardless of what has
+been widened to, so `verify` reads only what the cache already fetched. It catches structural
+drift only — a monthly content refresh that changes what a page says without moving, renaming, or
+delisting it is invisible to it, and the command says so in its own output.
+
 `--upstream <repository>` (or `SNDOCS_UPSTREAM`) overrides the repository cloned from. It is a
 supported part of the interface, and it exists so the test suite can run against a small local
 fixture rather than downloading 269 MB of monthly-changing upstream content. `SNDOCS_NOW`
 overrides the current time in the same spirit, so the suite can cross the seven-day staleness
-window without waiting a week.
+window without waiting a week. `--routing <file>` overrides which routing table `verify` checks,
+for the same reason: the suite verifies against a small fixture table, not the real one.
 
 Run `bin/sndocs help` for the full interface.
 

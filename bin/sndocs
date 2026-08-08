@@ -46,6 +46,7 @@ Usage:
   sndocs status  [--family <family>]
   sndocs index   [--family <family>]
   sndocs family  [--family <family>]
+  sndocs verify  [--family <family>] [--routing <file>]
   sndocs help
 
 Commands:
@@ -75,12 +76,26 @@ Commands:
            cache, outside version control, and safe to re-run any time: it
            reads whatever the cone currently holds and overwrites the index
            in place.
+  verify   Diff the curated routing table against the upstream structure the
+           cache already holds, and report every publication that no longer
+           exists, every entry topic that has moved or disappeared, and every
+           entry topic no longer linked from its own publication's index, as
+           JSON on stdout. Exits non-zero when it finds any discrepancy, zero
+           when clean. Reads only what the cache already fetched — no entry
+           costs a network round trip, and nothing is fetched on verify's own
+           account. Structural drift only: a content refresh that changes a
+           page without moving, renaming, or delisting it is invisible to
+           this command.
 
 Options:
   --family <family>       Documentation family to work on. Overrides every
                           configured source. When omitted, the family is
                           resolved as described below.
   --publication <name>    Publication to add to the cache. Repeat for several.
+  --routing <file>        Routing table to verify. Defaults to the one shipped
+                          next to this script, skills/sndocs/routing.tsv. The
+                          override exists so the test suite can verify against
+                          a small fixture table rather than the real one.
   --upstream <repository> Upstream documentation repository to clone from.
                           Defaults to $SNDOCS_UPSTREAM, else
                           https://github.com/ServiceNow/ServiceNowDocs.git.
@@ -141,6 +156,13 @@ cache_root() {
 
 config_root() {
 	printf '%s/sndocs\n' "${XDG_CONFIG_HOME:-$HOME/.config}"
+}
+
+# default_routing_file — the curated routing table shipped next to this
+# script, resolved from $0 rather than assumed to be the working directory:
+# `verify` has to find it regardless of where it is invoked from.
+default_routing_file() {
+	printf '%s/skills/sndocs/routing.tsv\n' "$(cd "$(dirname "$0")/.." && pwd)"
 }
 
 user_config_file() {
@@ -1033,6 +1055,158 @@ cmd_family() {
 	printf '}\n'
 }
 
+# ---------------------------------------------------------------------- verify
+#
+# Diffs the curated routing table against the upstream structure the cache
+# already holds, so a maintainer learns when a rename, a removed publication,
+# or a resolved filename collision has moved underneath a routing entry —
+# rather than an agent quietly routing toward a path that no longer means
+# what the table's note says it means.
+#
+# Three drift shapes, reported separately because each has a different fix:
+# a publication the table names no longer exists upstream; an entry topic
+# that has moved or disappeared within a publication that still exists; and
+# an entry topic no longer linked from that publication's own index, the
+# structural residue a rename or a resolved collision leaves behind even
+# when the old path happens to still resolve.
+#
+# Reads only what the cache already fetched: a blobless clone carries every
+# tree even outside the checked-out cone, so `git ls-tree` resolves any path
+# without pulling its blob, and every publication's index.md is part of the
+# initial cone regardless of what has been widened to. No entry costs a
+# network round trip, and nothing here fetches on its own — a stale cache is
+# still exactly what it was the last time something synced or refreshed it.
+#
+# This is structural drift only. A monthly content refresh that changes what
+# a page says without moving, renaming, or delisting it is invisible to this
+# command, on purpose — see its own help text and note() output below.
+
+# verify_entry_exists <repo> <publication> <entry_path> — true if the entry
+# resolves to a real tree entry, checked without touching its blob content.
+verify_entry_exists() {
+	[ -n "$(git -C "$1" ls-tree HEAD -- "markdown/$2/$3" 2>/dev/null)" ]
+}
+
+# verify_entry_linked <repo> <publication> <entry_path> — true if the
+# publication's own index links the entry by its full relative path.
+# Deliberately not a filename-alone fallback: two files that share a
+# basename under different subdirectories — the resolved-collision shape
+# this command exists to catch — would let one mask drift in the other.
+verify_entry_linked() {
+	_index="$1/markdown/$2/index.md"
+	[ -f "$_index" ] || return 0
+	grep -qF "$3" "$_index"
+}
+
+verify_emit() {
+	# verify_emit <type> <concept> <publication> <entry_path> <detail>
+	printf '{"type":"%s","concept":"%s","publication":"%s","entry_path":"%s","detail":"%s"}\n' \
+		"$(json_escape "$1")" "$(json_escape "$2")" "$(json_escape "$3")" \
+		"$(json_escape "$4")" "$(json_escape "$5")"
+}
+
+cmd_verify() {
+	family=''
+	routing=''
+
+	while [ "$#" -gt 0 ]; do
+		case $1 in
+		--family)
+			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
+			family=$2
+			shift 2
+			;;
+		--routing)
+			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--routing needs a value'
+			routing=$2
+			shift 2
+			;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		*) die "unknown option for verify: $1" ;;
+		esac
+	done
+
+	resolve_family "$family"
+	report_family
+	family=$FAMILY
+	dir=$(family_dir "$family")
+	assert_cache_exists "$dir" "$family"
+	repo="$dir/repo"
+
+	[ -n "$routing" ] || routing=$(default_routing_file)
+	[ -f "$routing" ] || die "no routing table at $routing"
+
+	note 'verify checks structure only — a publication that vanished, an entry that moved, or an entry delisted from its own index. A content refresh that leaves every path in place is invisible to it.'
+
+	rows=$(mktemp "$dir/.verify-rows.XXXXXX")
+	staging=$(mktemp "$dir/.verify.XXXXXX")
+	trap 'rm -f "$rows" "$staging"' EXIT INT TERM
+
+	grep -v '^[[:space:]]*#' "$routing" | grep -v '^[[:space:]]*$' >"$rows" || true
+
+	available=$(upstream_publications "$repo")
+	checked=0
+	tab=$(printf '\t')
+
+	while IFS="$tab" read -r concept publication entry_path _note; do
+		: "$_note" # the routing table's note column; read for its width, not its value
+		[ -n "$concept" ] || continue
+		checked=$((checked + 1))
+
+		if ! contains_line "$available" "$publication"; then
+			verify_emit publication-missing "$concept" "$publication" "$entry_path" \
+				"publication '$publication' no longer exists upstream for family '$family'" >>"$staging"
+			continue
+		fi
+
+		if ! verify_entry_exists "$repo" "$publication" "$entry_path"; then
+			verify_emit entry-missing "$concept" "$publication" "$entry_path" \
+				"entry topic '$entry_path' has moved or disappeared from publication '$publication'" >>"$staging"
+			continue
+		fi
+
+		if ! verify_entry_linked "$repo" "$publication" "$entry_path"; then
+			verify_emit unlinked-from-index "$concept" "$publication" "$entry_path" \
+				"entry topic '$entry_path' is no longer linked from '$publication''s index" >>"$staging"
+		fi
+	done <"$rows"
+
+	rm -f "$rows"
+
+	discrepancies=$(wc -l <"$staging" | tr -d '[:space:]')
+
+	printf '{\n'
+	printf '  "family": "%s",\n' "$(json_escape "$family")"
+	printf '  "routing": "%s",\n' "$(json_escape "$routing")"
+	printf '  "checked": %s,\n' "$checked"
+	printf '  "discrepancies": [\n'
+	_first=1
+	while IFS= read -r _record; do
+		[ -n "$_record" ] || continue
+		if [ "$_first" -eq 1 ]; then
+			_first=0
+		else
+			printf ',\n'
+		fi
+		printf '    %s' "$_record"
+	done <"$staging"
+	[ "$_first" -eq 1 ] || printf '\n'
+	printf '  ]\n'
+	printf '}\n'
+
+	rm -f "$staging"
+	trap - EXIT INT TERM
+
+	if [ "$discrepancies" -gt 0 ]; then
+		note "$discrepancies of $checked routing entries have drifted from upstream"
+		return 1
+	fi
+	note "$checked routing entries verified clean against upstream"
+}
+
 # ----------------------------------------------------------------------- main
 
 [ "$#" -gt 0 ] || {
@@ -1050,6 +1224,7 @@ refresh) cmd_refresh "$@" ;;
 status) cmd_status "$@" ;;
 index) cmd_index "$@" ;;
 family) cmd_family "$@" ;;
+verify) cmd_verify "$@" ;;
 help | -h | --help) usage ;;
 *)
 	printf 'sndocs: unknown command: %s\n\n' "$command" >&2
