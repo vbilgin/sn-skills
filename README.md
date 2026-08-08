@@ -205,7 +205,7 @@ the `mobile`, `nofamily`, and `other` branches; an MCP server.
 | Agent | Status |
 |---|---|
 | Claude Code | Primary target. Installs from the manifest, and a headless `claude -p` session correctly fires the skill on a Glide API question — verified directly (`claude` 2.1.224). Actually running `bin/sndocs` from that session was blocked on Bash approval in this sandbox and not observed to succeed; path resolution and answer accuracy are eval-gated (see [#9](https://github.com/vbilgin/skill-sndocs/issues/9)). |
-| Codex | Manifest installs and the skill is discovered — verified against `codex` 0.147.0 (`plugin marketplace add`, `plugin add`, materialized `bin/sndocs` and `SKILL.md` intact). **Live triggering by a running Codex agent is untested** — this environment had no authenticated Codex session to exercise it. The claim will be corrected, not hedged, once someone runs it for real. |
+| Codex | Verified end to end in a live, authenticated `codex exec` session (`codex` 0.147.0): installs from `vbilgin/skill-sndocs`, correctly fires on a Glide API question and stays silent on an unrelated one, resolves its own executable's path from the installed plugin location with no working-directory assumption, runs the full `sync`/`widen`/`index` sequence, slices the target API reference file by heading instead of reading it whole, and answers with the canonical URL and the (defaulted) family stated. |
 
 ## Provenance and independence
 

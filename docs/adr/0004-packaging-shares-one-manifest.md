@@ -37,7 +37,9 @@ entry. If a future Codex release drops the `.claude-plugin/plugin.json` fallback
 marketplace add` on this repository starts failing loudly rather than silently serving stale
 data, which is preferable to a manifest nobody is testing.
 
-This does not verify that Codex actually *triggers* the skill on a matching query — that requires
-an authenticated Codex session, which this environment did not have. Installation and skill
-discovery are verified; live triggering is not, and the README states that distinction rather
-than rounding it up to "supported."
+Live triggering was verified separately, in an authenticated `codex exec` session this
+environment did not have: the skill fired on a Glide API question, stayed silent on an unrelated
+one, resolved its own executable's path via the base-directory fallback described in
+`SKILL.md` (not an env var — nothing here depends on `PLUGIN_ROOT` actually being set by Codex),
+and answered with a canonical URL and the family stated. See the README's Agent support table for
+the specifics.
