@@ -1,0 +1,46 @@
+# Golden question set for skills/sndocs. Tab-separated. `#` starts a comment; blank lines
+# ignored.
+#
+# Every topic path named here was verified against the australia branch (and, for the
+# family-divergent rows, the named branch) on 2026-08-08 — read it first, by heading, never
+# whole, the same discipline SKILL.md itself follows.
+#
+# An author who also designed the retrieval strategy unconsciously writes questions that
+# strategy already answers, so these were drafted against verified topics and are meant to be
+# corrected by a maintainer who reviews them adversarially before they are trusted as a gate.
+#
+# Columns:
+#   id             short, stable, kebab-case
+#   category       lookup | routing | synonym | api-slice | family | absent | empty | no-trigger
+#   family_pin     family to pin via a temporary project .sndocs file, or "-" for the default
+#                  (newest) family
+#   question       the prompt given to the agent verbatim
+#   expect_topics  comma-separated substrings that must all appear somewhere in the agent's
+#                  tool-call stream (file paths read, commands run) — "-" if the case expects no
+#                  retrieval to occur at all
+#   expect_url     a substring the cited canonical_url must contain, beyond the base docs host
+#                  — used to prove a pinned family's URL segment was actually cited, "-" if not
+#                  applicable
+#   mode           found | absent | empty | no-retrieval — which assertion function run.sh applies
+#
+# id	category	family_pin	question	expect_topics	expect_url	mode
+lookup-glide-addquery	lookup	-	In a global, non-scoped-application server-side script, what does GlideRecord.addQuery() do, and what parameters does it take?	c_GlideRecordAPI.md	-	found
+lookup-data-policy	lookup	-	What is a Data Policy in ServiceNow, and how is it different from a UI Policy?	c_DataPolicy.md	-	found
+lookup-domain-separation-change	lookup	-	What does domain separation change about how the ServiceNow Change Management application behaves?	domain-separation-change-mgt.md	-	found
+routing-business-rule	routing	-	Where do server-side Business Rules execute in the ServiceNow request lifecycle?	c_BusinessRules.md	-	found
+routing-update-set	routing	-	How do Update Sets move customizations between ServiceNow instances?	system-update-sets.md	-	found
+routing-service-portal	routing	-	How do I build and configure a widget on a Service Portal page?	c_ServicePortal.md	-	found
+routing-notification	routing	-	How do I configure an email notification to fire when an incident record is updated?	c_EmailNotifications.md	-	found
+routing-acl	routing	-	How does ServiceNow evaluate Access Control Rules (ACLs) against a table operation?	access-control-rules.md	-	found
+synonym-cab	synonym	-	How do I access the CAB workbench in ServiceNow?	cab-workbench.md	-	found
+synonym-ci	synonym	-	How do I create a change request from a CI in ServiceNow?	t_CreateAChangeFromACI.md	-	found
+api-slice-glidedatetime	api-slice	-	What does GlideDateTime.addWeeksUTC() do?	c_GlideDateTimeAPI.md	-	found
+api-slice-glidequery	api-slice	-	What does the scoped GlideRecord method addEncodedQuery() do?	c_GlideRecordScopedAPI.md	-	found
+family-zurich-cab	family	zurich	In the ServiceNow documentation for this project's pinned release, describe the CAB workbench.	cab-workbench.md	/zurich/	found
+family-yokohama-business-rule	family	yokohama	In the ServiceNow documentation for this project's pinned release, how do classic server-side Business Rules work?	c_BusinessRules.md	/yokohama/	found
+absent-fake-method	absent	-	What does the GlideRecord method deleteAllRecordsPermanently() do?	-	-	absent
+absent-sentinel-mesh	absent	-	How do I wire a Business Rule to the ServiceNow Sentinel Compliance Mesh?	-	-	absent
+absent-fake-workspace	absent	-	How do I configure the Quantum Ledger Reconciliation Workspace in ServiceNow?	-	-	absent
+empty-rollback-to	empty	-	What does the "Rollback To" workflow activity do in classic ServiceNow Workflow?	r_RollbackTo.md	-	empty
+no-trigger-fibonacci	no-trigger	-	Write a Python function that returns the nth Fibonacci number.	-	-	no-retrieval
+no-trigger-quicksort	no-trigger	-	What's the time and space complexity of quicksort in the average case?	-	-	no-retrieval

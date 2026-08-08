@@ -4,12 +4,9 @@ A portable agent skill that gives AI coding agents **family-correct, cited retri
 [`ServiceNow/ServiceNowDocs`](https://github.com/ServiceNow/ServiceNowDocs) — ServiceNow's
 ~49,000-file documentation repository published for LLM consumption.
 
-> **Status: v0.x, in progress.** The design is settled. The cache executable can create, report,
-> and maintain a cache, resolve which family to use, and generate a heading index over it. The
-> skill definition, curated routing table, and retrieval procedure live at
-> [`skills/sndocs/SKILL.md`](skills/sndocs/SKILL.md), and the skill is now installable by name —
-> see [Installation](#installation). Eval results will be published in this README as they land,
-> and the cross-agent support claims below are marked untested until they are tested.
+> **Status: v0.2.0.** The skill is installable, and its retrieval strategy is measured, not just
+> designed: 20/20 golden questions pass against both Claude Code and Codex — see
+> [Eval results](#eval-results).
 
 ## Why
 
@@ -193,6 +190,46 @@ The suite runs offline. It builds a deterministic fixture repository — two fam
 realistic frontmatter, one oversized topic, one empty topic — and restricts git to the file
 protocol, so a test that reaches for the network fails loudly rather than downloading upstream.
 
+## Eval results
+
+```bash
+evals/run.sh --agent claude   # or: --agent codex
+```
+
+`tests/run.sh` checks `bin/sndocs` in isolation, against a fixture. It cannot check the thing
+this skill actually promises: that a real agent, given the real skill definition, retrieves the
+right documentation and cites it. `evals/run.sh` closes that gap — it drives the named agent
+non-interactively, one subprocess per question in [`evals/questions.tsv`](evals/questions.tsv),
+against the real upstream repository, and asserts on the agent's own tool-call stream: which
+topics it opened, on which family, and what it cited. The gate is retrieval-only, per the
+project's own design note in [CLAUDE.md](CLAUDE.md) — a passing case proves the right topic was
+opened and cited, not that the prose answer is good; occasional manual answer review is expected
+but is not part of the gate.
+
+**Measured, 2026-08-08** (`claude` 2.1.226, `codex-cli` 0.147.0), each suite run twice
+independently: **20/20 golden questions pass against both Claude Code and Codex.** The 20
+questions cover, at least once each: a straightforward single-topic lookup; a question the
+curated routing table has to disambiguate; a query phrased with an abbreviation only the synonym
+reference resolves; a method lookup inside a large API reference file, proving section-slicing;
+a question whose answer differs by family, with the pinned family's URL segment checked in what
+was cited; an absent-answer question, where the gate requires an explicit statement that nothing
+was found; a question targeting the one currently-known-empty upstream file this project has
+verified (`markdown/build-workflows/workflow-activities/r_RollbackTo.md`), where the gate
+requires the agent report an upstream defect rather than "not covered"; and a question that must
+trigger no retrieval at all.
+
+**The curated routing table earned its keep.** Every routing-disambiguation case's tool-call
+transcript shows `skills/sndocs/routing.tsv` consulted before the agent settled on the correct
+publication — both agents actually route through it rather than guessing right on general
+knowledge. It stays.
+
+Building this suite surfaced three bugs in the runner itself before it surfaced anything about
+the skill — worth naming because they're the kind of thing that silently invalidates a "20/20":
+an ambiguous question that had two legitimately correct answers, an assertion that misread "not
+a 'not covered' gap" as claiming the opposite, and a case working directory whose own name
+happened to contain the string the no-retrieval check was grepping for. All three are fixed in
+the current suite; see the comments in `evals/run.sh` and `evals/questions.tsv` for the specifics.
+
 ## Correctness contracts
 
 These are the reason the skill exists. Every one of them is an eval case.
@@ -221,8 +258,8 @@ the `mobile`, `nofamily`, and `other` branches; an MCP server.
 
 | Agent | Status |
 |---|---|
-| Claude Code | Primary target. Installs from the manifest, and a headless `claude -p` session correctly fires the skill on a Glide API question — verified directly (`claude` 2.1.224). Actually running `bin/sndocs` from that session was blocked on Bash approval in this sandbox and not observed to succeed; path resolution and answer accuracy are eval-gated (see [#9](https://github.com/vbilgin/skill-sndocs/issues/9)). |
-| Codex | Verified end to end in a live, authenticated `codex exec` session (`codex` 0.147.0): installs from `vbilgin/skill-sndocs`, correctly fires on a Glide API question and stays silent on an unrelated one, resolves its own executable's path from the installed plugin location with no working-directory assumption, runs the full `sync`/`widen`/`index` sequence, slices the target API reference file by heading instead of reading it whole, and answers with the canonical URL and the (defaulted) family stated. |
+| Claude Code | Primary target. Installs from the manifest, fires on a Glide API question, and stays silent on general programming questions. All 20 golden questions in `evals/questions.tsv` pass, on two independent runs (`claude` 2.1.226) — see [Eval results](#eval-results). |
+| Codex | Installs from the manifest, fires on a Glide API question, and stays silent on general programming questions. All 20 golden questions pass, on two independent runs (`codex-cli` 0.147.0) — see [Eval results](#eval-results). |
 
 ## Provenance and independence
 
