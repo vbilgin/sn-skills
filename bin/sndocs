@@ -248,10 +248,6 @@ kv_read() {
 # and agents inherit it without being told. A consultant moving between client
 # repositories changes documentation sets by changing directory.
 
-FAMILY=''
-FAMILY_SOURCE=''
-FAMILY_SOURCE_PATH=''
-
 # find_project_config — the nearest project configuration file at or above the
 # working directory, or non-zero if there is none.
 find_project_config() {
@@ -266,70 +262,51 @@ find_project_config() {
 	done
 }
 
-# resolve_family [<explicit family>] — sets FAMILY, FAMILY_SOURCE and
-# FAMILY_SOURCE_PATH. A configured family is validated here, in the shell that
-# can still die: a bad value in a file is fatal and names the file, never
-# quietly skipped in favour of the next source.
-resolve_family() {
-	FAMILY_SOURCE_PATH=''
+# family_context <cli_family> — resolves and reports the Family in one call,
+# returning a single tab-delimited record (name, source, source_path) on
+# stdout. A configured family is validated here, in the shell that can still
+# die: a bad value in a file is fatal and names the file, never quietly
+# skipped in favour of the next source.
+family_context() {
+	_source_path=''
 
 	if [ -n "${1:-}" ]; then
 		assert_family_name "$1"
-		FAMILY=$1
-		FAMILY_SOURCE=argument
-		return 0
-	fi
-
-	if _file=$(find_project_config); then
-		if _value=$(kv_read "$_file" family); then
-			# The key is present, so a bad or empty value is this file's
-			# mistake to report — never a reason to fall through to the next
-			# source as though it had said nothing.
-			assert_family_name "$_value" "$_file"
-			FAMILY=$_value
-			FAMILY_SOURCE=project
-			FAMILY_SOURCE_PATH=$_file
-			return 0
-		fi
-	fi
-
-	_file=$(user_config_file)
-	if _value=$(kv_read "$_file" family); then
+		_family=$1
+		_source=argument
+	elif _file=$(find_project_config) && _value=$(kv_read "$_file" family); then
+		# The key is present, so a bad or empty value is this file's mistake
+		# to report — never a reason to fall through to the next source as
+		# though it had said nothing.
 		assert_family_name "$_value" "$_file"
-		FAMILY=$_value
-		FAMILY_SOURCE=user
-		FAMILY_SOURCE_PATH=$_file
-		return 0
+		_family=$_value
+		_source=project
+		_source_path=$_file
+	elif _file=$(user_config_file) && _value=$(kv_read "$_file" family); then
+		assert_family_name "$_value" "$_file"
+		_family=$_value
+		_source=user
+		_source_path=$_file
+	else
+		_family=$SNDOCS_NEWEST_FAMILY
+		_source=default
 	fi
 
-	FAMILY=$SNDOCS_NEWEST_FAMILY
-	FAMILY_SOURCE=default
-}
-
-# report_family — says which family is being worked on and where that came
-# from, so no answer is ever attributed to a family nobody chose.
-report_family() {
-	case $FAMILY_SOURCE in
+	# Says which family is being worked on and where that came from, so no
+	# answer is ever attributed to a family nobody chose.
+	case $_source in
 	argument)
-		note "family $FAMILY, from --family"
+		note "family $_family, from --family"
 		;;
 	project | user)
-		note "family $FAMILY, from $FAMILY_SOURCE_PATH"
+		note "family $_family, from $_source_path"
 		;;
 	default)
-		note "no family configured; using the newest family '$FAMILY'. Pin one with 'family=<family>' in $SNDOCS_PROJECT_CONFIG at the root of this repository"
+		note "no family configured; using the newest family '$_family'. Pin one with 'family=<family>' in $SNDOCS_PROJECT_CONFIG at the root of this repository"
 		;;
 	esac
-}
 
-# family_context <cli_family> — resolves and reports the Family in one call,
-# returning a single tab-delimited record (name, source, source_path) on
-# stdout instead of leaving three globals for the caller to read in the right
-# order. Same precedence and same stderr note as resolve_family/report_family.
-family_context() {
-	resolve_family "$1"
-	report_family
-	printf '%s\t%s\t%s\n' "$FAMILY" "$FAMILY_SOURCE" "$FAMILY_SOURCE_PATH"
+	printf '%s\t%s\t%s\n' "$_family" "$_source" "$_source_path"
 }
 
 # ------------------------------------------------------------- out of support
@@ -577,14 +554,14 @@ refresh_cache() {
 # ----------------------------------------------------------------------- sync
 
 cmd_sync() {
-	family=''
+	cli_family=''
 	upstream=${SNDOCS_UPSTREAM:-$SNDOCS_DEFAULT_UPSTREAM}
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
 		--family)
 			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
-			family=$2
+			cli_family=$2
 			shift 2
 			;;
 		--upstream)
@@ -600,9 +577,11 @@ cmd_sync() {
 		esac
 	done
 
-	resolve_family "$family"
-	report_family
-	family=$FAMILY
+	tab=$(printf '\t')
+	_record=$(family_context "$cli_family")
+	IFS="$tab" read -r family family_source family_source_path <<EOF
+$_record
+EOF
 	dir=$(family_dir "$family")
 
 	# A cache inside the staleness window is left alone: syncing again must
@@ -657,7 +636,7 @@ cmd_sync() {
 			# on the command line and published nowhere is likelier a typo,
 			# and telling someone to migrate their instance over a misspelling
 			# would be its own confidently-wrong answer.
-			if [ "$FAMILY_SOURCE" = argument ]; then
+			if [ "$family_source" = argument ]; then
 				die_not_published "$upstream" "$family"
 			fi
 			die_out_of_support "$upstream" "$family"
@@ -695,14 +674,14 @@ cmd_sync() {
 # patterns bring into the checkout.
 
 cmd_widen() {
-	family=''
+	cli_family=''
 	publications=''
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
 		--family)
 			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
-			family=$2
+			cli_family=$2
 			shift 2
 			;;
 		--publication)
@@ -723,9 +702,11 @@ cmd_widen() {
 		esac
 	done
 
-	resolve_family "$family"
-	report_family
-	family=$FAMILY
+	tab=$(printf '\t')
+	_record=$(family_context "$cli_family")
+	IFS="$tab" read -r family family_source family_source_path <<EOF
+$_record
+EOF
 	[ -n "$publications" ] || die 'widen needs at least one --publication'
 
 	dir=$(family_dir "$family")
@@ -790,13 +771,13 @@ cmd_widen() {
 # -------------------------------------------------------------------- refresh
 
 cmd_refresh() {
-	family=''
+	cli_family=''
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
 		--family)
 			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
-			family=$2
+			cli_family=$2
 			shift 2
 			;;
 		-h | --help)
@@ -807,9 +788,11 @@ cmd_refresh() {
 		esac
 	done
 
-	resolve_family "$family"
-	report_family
-	family=$FAMILY
+	tab=$(printf '\t')
+	_record=$(family_context "$cli_family")
+	IFS="$tab" read -r family family_source family_source_path <<EOF
+$_record
+EOF
 	dir=$(family_dir "$family")
 	assert_cache_exists "$dir" "$family"
 
@@ -906,13 +889,13 @@ index_file() {
 }
 
 cmd_index() {
-	family=''
+	cli_family=''
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
 		--family)
 			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
-			family=$2
+			cli_family=$2
 			shift 2
 			;;
 		-h | --help)
@@ -923,9 +906,11 @@ cmd_index() {
 		esac
 	done
 
-	resolve_family "$family"
-	report_family
-	family=$FAMILY
+	tab=$(printf '\t')
+	_record=$(family_context "$cli_family")
+	IFS="$tab" read -r family family_source family_source_path <<EOF
+$_record
+EOF
 	dir=$(family_dir "$family")
 	assert_cache_exists "$dir" "$family"
 
@@ -1121,14 +1106,14 @@ verify_emit() {
 }
 
 cmd_verify() {
-	family=''
+	cli_family=''
 	routing=''
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
 		--family)
 			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
-			family=$2
+			cli_family=$2
 			shift 2
 			;;
 		--routing)
@@ -1144,9 +1129,11 @@ cmd_verify() {
 		esac
 	done
 
-	resolve_family "$family"
-	report_family
-	family=$FAMILY
+	tab=$(printf '\t')
+	_record=$(family_context "$cli_family")
+	IFS="$tab" read -r family family_source family_source_path <<EOF
+$_record
+EOF
 	dir=$(family_dir "$family")
 	assert_cache_exists "$dir" "$family"
 	repo="$dir/repo"
