@@ -4,7 +4,7 @@ A portable agent skill that gives AI coding agents **family-correct, cited retri
 [`ServiceNow/ServiceNowDocs`](https://github.com/ServiceNow/ServiceNowDocs) — ServiceNow's
 ~49,000-file documentation repository published for LLM consumption.
 
-> **Status: v1.0.0.** The skill is installable, and its retrieval strategy is measured, not just
+> **Status: v1.1.0.** The skill is installable, and its retrieval strategy is measured, not just
 > designed: 20/20 golden questions pass against both Claude Code and Codex — see
 > [Eval results](#eval-results).
 
