@@ -69,12 +69,11 @@ generic code, retrieve only for the ServiceNow-specific part.
 "$SNDOCS_ROOT/bin/sndocs" sync --family <family>
 ```
 
-`sync` is cheap when the cache is already fresh — it's a no-op, not a re-clone. `family` reports
-its resolution as `family`/`source`/`source_path`; `status` (below) reports the same resolution
-on its own JSON as `family`/`family_source`/`family_source_path` — same information, different
-key names depending which command you asked. State both the family and where it came from in the
-answer: an answer nobody knows the family of is not attributable. If this exits reporting a
-family as out of support, stop and relay that verbatim — it is not a bug to route around.
+`sync` is cheap when the cache is already fresh — it's a no-op, not a re-clone. `family` and
+`status` (below) both report the resolution as `family`/`family_source`/`family_source_path` on
+their JSON. State both the family and where it came from in the answer: an answer nobody knows
+the family of is not attributable. If this exits reporting a family as out of support, stop and
+relay that verbatim — it is not a bug to route around.
 
 Run `"$SNDOCS_ROOT/bin/sndocs" status --family <family>` to get the cache's age and staleness as
 JSON. If `stale` is `true`, state the cache's age on the answer; don't refresh proactively past
