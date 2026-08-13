@@ -322,6 +322,16 @@ report_family() {
 	esac
 }
 
+# family_context <cli_family> — resolves and reports the Family in one call,
+# returning a single tab-delimited record (name, source, source_path) on
+# stdout instead of leaving three globals for the caller to read in the right
+# order. Same precedence and same stderr note as resolve_family/report_family.
+family_context() {
+	resolve_family "$1"
+	report_family
+	printf '%s\t%s\t%s\n' "$FAMILY" "$FAMILY_SOURCE" "$FAMILY_SOURCE_PATH"
+}
+
 # ------------------------------------------------------------- out of support
 #
 # Upstream deletes the oldest Family branch when a new release reaches general
@@ -809,13 +819,13 @@ cmd_refresh() {
 # --------------------------------------------------------------------- status
 
 cmd_status() {
-	family=''
+	cli_family=''
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
 		--family)
 			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
-			family=$2
+			cli_family=$2
 			shift 2
 			;;
 		-h | --help)
@@ -826,9 +836,11 @@ cmd_status() {
 		esac
 	done
 
-	resolve_family "$family"
-	report_family
-	family=$FAMILY
+	tab=$(printf '\t')
+	_record=$(family_context "$cli_family")
+	IFS="$tab" read -r family family_source family_source_path <<EOF
+$_record
+EOF
 	dir=$(family_dir "$family")
 
 	assert_cache_exists "$dir" "$family"
@@ -853,8 +865,8 @@ cmd_status() {
 
 	printf '{\n'
 	printf '  "family": "%s",\n' "$(json_escape "$family")"
-	printf '  "family_source": "%s",\n' "$(json_escape "$FAMILY_SOURCE")"
-	printf '  "family_source_path": "%s",\n' "$(json_escape "$FAMILY_SOURCE_PATH")"
+	printf '  "family_source": "%s",\n' "$(json_escape "$family_source")"
+	printf '  "family_source_path": "%s",\n' "$(json_escape "$family_source_path")"
 	printf '  "commit": "%s",\n' "$(json_escape "$commit")"
 	printf '  "fetched_at": "%s",\n' "$(json_escape "$fetched_at")"
 	printf '  "age_seconds": %s,\n' "$age"
@@ -1027,13 +1039,13 @@ cmd_index() {
 # network, and without running something that changes state.
 
 cmd_family() {
-	family=''
+	cli_family=''
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
 		--family)
 			[ "$#" -ge 2 ] && [ -n "$2" ] || die '--family needs a value'
-			family=$2
+			cli_family=$2
 			shift 2
 			;;
 		-h | --help)
@@ -1044,14 +1056,17 @@ cmd_family() {
 		esac
 	done
 
-	resolve_family "$family"
-	report_family
+	tab=$(printf '\t')
+	_record=$(family_context "$cli_family")
+	IFS="$tab" read -r family family_source family_source_path <<EOF
+$_record
+EOF
 
 	printf '{\n'
-	printf '  "family": "%s",\n' "$(json_escape "$FAMILY")"
-	printf '  "source": "%s",\n' "$(json_escape "$FAMILY_SOURCE")"
-	printf '  "source_path": "%s",\n' "$(json_escape "$FAMILY_SOURCE_PATH")"
-	printf '  "cache": "%s"\n' "$(json_escape "$(family_dir "$FAMILY")/repo")"
+	printf '  "family": "%s",\n' "$(json_escape "$family")"
+	printf '  "family_source": "%s",\n' "$(json_escape "$family_source")"
+	printf '  "family_source_path": "%s",\n' "$(json_escape "$family_source_path")"
+	printf '  "cache": "%s"\n' "$(json_escape "$(family_dir "$family")/repo")"
 	printf '}\n'
 }
 

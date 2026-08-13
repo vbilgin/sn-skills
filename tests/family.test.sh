@@ -12,7 +12,7 @@ test_an_explicit_argument_overrides_every_configured_source() {
 
 	run_family --family australia
 	assert_equals australia "$(json_field "$RUN_OUT" family)"
-	assert_equals argument "$(json_field "$RUN_OUT" source)"
+	assert_equals argument "$(json_field "$RUN_OUT" family_source)"
 }
 
 test_a_project_configuration_overrides_user_configuration() {
@@ -21,8 +21,8 @@ test_a_project_configuration_overrides_user_configuration() {
 
 	run_family
 	assert_equals zurich "$(json_field "$RUN_OUT" family)"
-	assert_equals project "$(json_field "$RUN_OUT" source)"
-	assert_equals "$(pwd)/.sndocs" "$(json_field "$RUN_OUT" source_path)"
+	assert_equals project "$(json_field "$RUN_OUT" family_source)"
+	assert_equals "$(pwd)/.sndocs" "$(json_field "$RUN_OUT" family_source_path)"
 }
 
 test_user_configuration_is_used_when_no_project_file_exists() {
@@ -30,14 +30,14 @@ test_user_configuration_is_used_when_no_project_file_exists() {
 
 	run_family
 	assert_equals zurich "$(json_field "$RUN_OUT" family)"
-	assert_equals user "$(json_field "$RUN_OUT" source)"
-	assert_equals "$XDG_CONFIG_HOME/sndocs/config" "$(json_field "$RUN_OUT" source_path)"
+	assert_equals user "$(json_field "$RUN_OUT" family_source)"
+	assert_equals "$XDG_CONFIG_HOME/sndocs/config" "$(json_field "$RUN_OUT" family_source_path)"
 }
 
 test_the_newest_family_is_used_with_a_warning_when_nothing_is_configured() {
 	run_family
 	assert_equals australia "$(json_field "$RUN_OUT" family)"
-	assert_equals default "$(json_field "$RUN_OUT" source)"
+	assert_equals default "$(json_field "$RUN_OUT" family_source)"
 
 	# The warning is the point: falling back is a guess, and a guess about the
 	# family is the one guess this project exists to prevent going unnoticed.
@@ -52,7 +52,7 @@ test_a_project_file_above_the_working_directory_is_found() {
 
 	run_family
 	assert_equals zurich "$(json_field "$RUN_OUT" family)"
-	assert_equals project "$(json_field "$RUN_OUT" source)"
+	assert_equals project "$(json_field "$RUN_OUT" family_source)"
 }
 
 test_the_nearest_project_file_wins() {
