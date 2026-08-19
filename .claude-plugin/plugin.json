@@ -1,12 +1,12 @@
 {
-  "name": "sndocs",
+  "name": "sn-skills",
   "version": "1.1.0",
-  "description": "Family-correct, cited retrieval over ServiceNow product documentation (ServiceNow/ServiceNowDocs). Consults real docs before stating a Glide API signature or any version-dependent platform fact, and says so when the documentation has nothing.",
+  "description": "Third-party AI skills for those working in ServiceNow. Not affiliated with ServiceNow, Inc. Ships the docs skill: family-correct, cited retrieval over ServiceNow product documentation (ServiceNow/ServiceNowDocs) — right docs, right family, cited.",
   "author": {
     "name": "Victor Bilgin"
   },
-  "homepage": "https://github.com/vbilgin/skill-sndocs",
-  "repository": "https://github.com/vbilgin/skill-sndocs",
+  "homepage": "https://github.com/vbilgin/sn-skills",
+  "repository": "https://github.com/vbilgin/sn-skills",
   "license": "Apache-2.0",
   "keywords": [
     "servicenow",
@@ -15,6 +15,6 @@
     "retrieval"
   ],
   "skills": [
-    "./skills/sndocs"
+    "./skills/docs"
   ]
 }

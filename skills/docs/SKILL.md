@@ -1,5 +1,5 @@
 ---
-name: sndocs
+name: docs
 description: >
   Consult real ServiceNow product documentation before stating a Glide API signature, an ACL/
   Business Rule/Flow Designer/Client Script behaviour, or any other version-dependent ServiceNow
@@ -11,7 +11,7 @@ description: >
   that don't touch the ServiceNow platform.
 ---
 
-# sndocs — cited retrieval over ServiceNow product documentation
+# sn-skills/docs — cited retrieval over ServiceNow product documentation
 
 You are about to say something about the ServiceNow platform that could be wrong in a way the
 person can't easily catch: an API signature, an ACL/Business Rule/Flow evaluation order, a
@@ -47,13 +47,13 @@ reuse it as `SNDOCS_ROOT`:
 1. `CLAUDE_PLUGIN_ROOT`, if set — Claude Code, loaded from an installed plugin.
 2. `PLUGIN_ROOT`, if set — Codex, loaded from an installed plugin.
 3. Otherwise, this file's own location. This invocation reported a base directory for this skill
-   — it ends in `skills/sndocs`; strip that suffix and you have `SNDOCS_ROOT`. Use that literal,
+   — it ends in `skills/docs`; strip that suffix and you have `SNDOCS_ROOT`. Use that literal,
    resolved path in the commands below. Never fall back to a bare `.` or a relative path: nothing
    guarantees the working directory is this skill's root, and a wrong guess fails silently as
    "command not found" rather than loudly.
 
 Every command in this procedure is `"$SNDOCS_ROOT/bin/sndocs"`, and the routing table and synonym
-reference live under `"$SNDOCS_ROOT/skills/sndocs/"`.
+reference live under `"$SNDOCS_ROOT/skills/docs/"`.
 
 ### 0. Decide whether this needs retrieval at all
 
@@ -101,7 +101,7 @@ preferred term, and search precision depends on matching that vocabulary.
 
 ### 3. Route: routing table first, then the heading index, then full text as fallback
 
-Check `"$SNDOCS_ROOT/skills/sndocs/routing.tsv"` for the (normalized) concept. It's a small, curated,
+Check `"$SNDOCS_ROOT/skills/docs/routing.tsv"` for the (normalized) concept. It's a small, curated,
 diffable table — a handful of high-traffic concepts mapped to the one publication that's
 authoritative for them, because several publications can plausibly mention a concept (ACLs show
 up in application-development too) and only one is the entry point. If the concept isn't in the

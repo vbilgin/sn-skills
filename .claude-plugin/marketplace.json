@@ -1,14 +1,14 @@
 {
-  "name": "sndocs",
+  "name": "sn-skills",
   "owner": {
     "name": "Victor Bilgin"
   },
-  "description": "Family-correct, cited retrieval over ServiceNow product documentation, as an installable plugin.",
+  "description": "Third-party AI skills for those working in ServiceNow. Not affiliated with ServiceNow, Inc.",
   "plugins": [
     {
-      "name": "sndocs",
+      "name": "sn-skills",
       "source": "./",
-      "description": "Family-correct, cited retrieval over ServiceNow product documentation (ServiceNow/ServiceNowDocs).",
+      "description": "Right docs. Right family. Cited. Family-correct, cited retrieval over ServiceNow product documentation (ServiceNow/ServiceNowDocs).",
       "category": "documentation",
       "keywords": [
         "servicenow",
