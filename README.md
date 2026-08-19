@@ -1,4 +1,4 @@
-# sn-skills
+# skill-sndocs
 
 A portable agent skill that gives AI coding agents **family-correct, cited retrieval** over
 [`ServiceNow/ServiceNowDocs`](https://github.com/ServiceNow/ServiceNowDocs) — ServiceNow's
@@ -46,17 +46,17 @@ default).
 **Claude Code:**
 
 ```bash
-claude plugin marketplace add vbilgin/sn-skills
+claude plugin marketplace add vbilgin/skill-sndocs
 claude plugin install sndocs@sndocs
 ```
 
-Or, from inside a session: `/plugin marketplace add vbilgin/sn-skills` then
+Or, from inside a session: `/plugin marketplace add vbilgin/skill-sndocs` then
 `/plugin install sndocs@sndocs`.
 
 **Codex:**
 
 ```bash
-codex plugin marketplace add vbilgin/sn-skills
+codex plugin marketplace add vbilgin/skill-sndocs
 codex plugin add sndocs@sndocs
 ```
 

@@ -5,8 +5,8 @@
   "author": {
     "name": "Victor Bilgin"
   },
-  "homepage": "https://github.com/vbilgin/sn-skills",
-  "repository": "https://github.com/vbilgin/sn-skills",
+  "homepage": "https://github.com/vbilgin/skill-sndocs",
+  "repository": "https://github.com/vbilgin/skill-sndocs",
   "license": "Apache-2.0",
   "keywords": [
     "servicenow",
