@@ -1,7 +1,7 @@
 # One plugin manifest serves Claude Code and Codex; there is no `.codex-plugin`
 
 Packaging needs to make the Skill installable in Claude Code and in Codex without forking the
-retrieval procedure per agent — `skills/sndocs/SKILL.md` is the one copy, referenced by every
+retrieval procedure per agent — `skills/docs/SKILL.md` is the one copy, referenced by every
 packaging form. The open question was whether that same rule extends to the *manifest* JSON, or
 whether each ecosystem needs its own.
 
@@ -14,6 +14,10 @@ add <path>` against a repository holding only `.claude-plugin/plugin.json` and
 installed it, materializing `bin/sndocs` and `skills/sndocs/SKILL.md` intact (executable bit
 preserved; Codex clones the source rather than copying it, so nothing here depends on symlinks
 surviving install). No `.codex-plugin` directory was present for either step.
+
+<!-- Deliberately historical: this paragraph is a verbatim record of a dated verification run
+(2026-08-07), under the repository's name at that time. Not updated to the current `docs` /
+`sn-skills` naming. -->
 
 ## Considered options
 
@@ -31,7 +35,7 @@ surviving install). No `.codex-plugin` directory was present for either step.
 
 ## Consequences
 
-Two ecosystems' plugin managers point at the same two JSON files and the same `skills/sndocs/`
+Two ecosystems' plugin managers point at the same two JSON files and the same `skills/docs/`
 directory; there is exactly one place that names the version, the skill path, or the marketplace
 entry. If a future Codex release drops the `.claude-plugin/plugin.json` fallback, `codex plugin
 marketplace add` on this repository starts failing loudly rather than silently serving stale

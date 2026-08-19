@@ -1,8 +1,8 @@
 # Family is pinned in the repository, and its withdrawal is fatal
 
 The Family a question is answered from is resolved, highest wins, from: an explicit argument on
-the invocation, a `.sndocs` file at or above the working directory, the user configuration at
-`$XDG_CONFIG_HOME/sndocs/config`, and finally the newest Family with a warning that nothing was
+the invocation, a `.docs` file at or above the working directory, the user configuration at
+`$XDG_CONFIG_HOME/docs/config`, and finally the newest Family with a warning that nothing was
 configured. The project file is the documented default. When the resolved Family's branch is no
 longer published upstream, the command stops and reports the Release as **out of support**,
 exiting non-zero.
@@ -37,7 +37,7 @@ On a withdrawn Family:
 
 ## Consequences
 
-Resolution is offline and needs no Cache, so `sndocs family` answers "which Family am I about to
+Resolution is offline and needs no Cache, so `bin/docs family` answers "which Family am I about to
 get" without touching the network or changing any state. Every command reports the Family it
 resolved and where that came from, and `status` carries both as fields.
 

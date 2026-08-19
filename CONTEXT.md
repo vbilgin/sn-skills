@@ -57,8 +57,9 @@ _Avoid_: canonical term
 ## This project
 
 **Skill**:
-This project's deliverable: the instructions and supporting executable that an AI coding agent
-loads in order to retrieve documentation. Unqualified "skill" always means this one.
+One of `sn-skills`' skills, each named for what it does. This document describes `docs`: the
+instructions and supporting executable an AI coding agent loads in order to retrieve
+documentation. Unqualified "skill" in this document always means `docs`.
 _Avoid_: plugin, agent skill, tool
 
 **Now Assist skill**:

@@ -1,6 +1,6 @@
 # The curated routing table is kept, on eval evidence, not on design intuition
 
-The routing table (`skills/sndocs/routing.tsv`) was designed on the premise that several
+The routing table (`skills/docs/routing.tsv`) was designed on the premise that several
 publications can plausibly mention a concept — ACLs show up in both `platform-security` and
 `application-development` — and only one is the entry point a heading-index grep alone won't
 reliably surface. That premise was never tested against a real agent; it was the reason the table
@@ -42,6 +42,6 @@ it originally.
 
 ## Consequences
 
-The table stays small and diffable by design (`bin/sndocs verify` catches drift against upstream
+The table stays small and diffable by design (`bin/docs verify` catches drift against upstream
 structure). Every row exists because a golden question exercises it; a row that stops being able
 to point at a passing eval case is a candidate for deletion, not a row to keep for symmetry.
