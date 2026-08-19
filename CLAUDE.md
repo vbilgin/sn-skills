@@ -1,6 +1,6 @@
-# skill-sndocs
+# sn-skills
 
-Building an agent skill for retrieval over [`ServiceNow/ServiceNowDocs`](https://github.com/ServiceNow/ServiceNowDocs).
+Building `docs`, an agent skill for retrieval over [`ServiceNow/ServiceNowDocs`](https://github.com/ServiceNow/ServiceNowDocs).
 Read [README.md](README.md) for why this exists and what the correctness contracts are.
 
 ## Non-obvious facts about upstream
@@ -29,13 +29,13 @@ Verified 2026-08-06 against the `australia` branch. Re-verify before relying on 
   claim in the README depends on it.
 - The sync script is dependency-free POSIX shell. No Node, no Python venv, no `npx`.
 - Search belongs to the host agent's native tools. Do not wrap grep.
-- This skill is **docs-only**. It never touches a live ServiceNow instance.
+- `docs` is **retrieval-only**. It never touches a live ServiceNow instance.
 
 ## Agent skills
 
 ### Issue tracker
 
-Issues live in GitHub Issues at `vbilgin/skill-sndocs`, via the `gh` CLI.
+Issues live in GitHub Issues at `vbilgin/sn-skills`, via the `gh` CLI.
 See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
