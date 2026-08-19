@@ -13,7 +13,7 @@
 #   note          why this publication and not a plausible-looking other one
 #
 # Diffable on purpose: this is data an upstream restructure should break
-# loudly — checked by `bin/sndocs verify` — not prose that quietly drifts out
+# loudly — checked by `bin/docs verify` — not prose that quietly drifts out
 # of date. A row that never changes an eval outcome is a row to delete, not
 # to keep for symmetry.
 #

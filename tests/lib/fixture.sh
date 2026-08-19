@@ -21,10 +21,10 @@ FIXTURE_DATE='2026-01-15T09:00:00Z'
 fixture_git() {
 	_dir=$1
 	shift
-	GIT_AUTHOR_NAME='sndocs fixture' \
+	GIT_AUTHOR_NAME='docs fixture' \
 		GIT_AUTHOR_EMAIL='fixture@example.invalid' \
 		GIT_AUTHOR_DATE="$FIXTURE_DATE" \
-		GIT_COMMITTER_NAME='sndocs fixture' \
+		GIT_COMMITTER_NAME='docs fixture' \
 		GIT_COMMITTER_EMAIL='fixture@example.invalid' \
 		GIT_COMMITTER_DATE="$FIXTURE_DATE" \
 		git -C "$_dir" -c commit.gpgsign=false -c core.autocrlf=false "$@"

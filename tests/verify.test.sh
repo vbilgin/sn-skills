@@ -2,10 +2,10 @@
 # Drift verification: `verify` diffs the curated routing table against the
 # upstream structure the cache already holds.
 set -u
-. "$SNDOCS_TEST_LIB/harness.sh"
+. "$DOCS_TEST_LIB/harness.sh"
 
 sync_australia() {
-	run_sndocs sync --family australia --upstream "$(fixture_upstream)"
+	run_docs sync --family australia --upstream "$(fixture_upstream)"
 	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
 }
 
@@ -50,7 +50,7 @@ Not linked from the publication index.
 EOF
 	git -C "$_dir" add -A
 	git -C "$_dir" \
-		-c user.name='sndocs fixture' \
+		-c user.name='docs fixture' \
 		-c user.email='fixture@example.invalid' \
 		-c commit.gpgsign=false \
 		commit -qam 'docs: add orphan topic'
@@ -97,7 +97,7 @@ EOF
 		>>"$_dir/markdown/platform-security/index.md"
 	git -C "$_dir" add -A
 	git -C "$_dir" \
-		-c user.name='sndocs fixture' \
+		-c user.name='docs fixture' \
 		-c user.email='fixture@example.invalid' \
 		-c commit.gpgsign=false \
 		commit -qam 'docs: add colliding-basename topics'
@@ -105,10 +105,10 @@ EOF
 
 test_reports_a_publication_that_no_longer_exists_upstream() {
 	sync_australia
-	routing="$SNDOCS_TEST_TMP/routing.tsv"
+	routing="$DOCS_TEST_TMP/routing.tsv"
 	write_test_routing "$routing"
 
-	run_sndocs verify --family australia --routing "$routing"
+	run_docs verify --family australia --routing "$routing"
 	[ "$RUN_STATUS" -ne 0 ] || fail 'verify should exit non-zero when drift is found'
 	assert_contains "$RUN_OUT" '"type":"publication-missing"'
 	assert_contains "$RUN_OUT" '"concept":"dead-publication"'
@@ -117,10 +117,10 @@ test_reports_a_publication_that_no_longer_exists_upstream() {
 
 test_reports_an_entry_topic_that_has_moved_or_disappeared() {
 	sync_australia
-	routing="$SNDOCS_TEST_TMP/routing.tsv"
+	routing="$DOCS_TEST_TMP/routing.tsv"
 	write_test_routing "$routing"
 
-	run_sndocs verify --family australia --routing "$routing"
+	run_docs verify --family australia --routing "$routing"
 	assert_contains "$RUN_OUT" '"type":"entry-missing"'
 	assert_contains "$RUN_OUT" '"concept":"moved-topic"'
 	assert_contains "$RUN_OUT" '"entry_path":"moved-topic.md"'
@@ -129,13 +129,13 @@ test_reports_an_entry_topic_that_has_moved_or_disappeared() {
 test_reports_a_routing_target_absent_from_upstreams_own_index() {
 	upstream=$(private_upstream)
 	add_orphan_topic
-	run_sndocs sync --family australia --upstream "$upstream"
+	run_docs sync --family australia --upstream "$upstream"
 	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
 
-	routing="$SNDOCS_TEST_TMP/routing.tsv"
+	routing="$DOCS_TEST_TMP/routing.tsv"
 	write_test_routing "$routing"
 
-	run_sndocs verify --family australia --routing "$routing"
+	run_docs verify --family australia --routing "$routing"
 	assert_contains "$RUN_OUT" '"type":"unlinked-from-index"'
 	assert_contains "$RUN_OUT" '"concept":"orphan-topic"'
 	assert_contains "$RUN_OUT" '"entry_path":"orphan-topic.md"'
@@ -144,14 +144,14 @@ test_reports_a_routing_target_absent_from_upstreams_own_index() {
 test_a_basename_collision_does_not_mask_an_unlinked_entry() {
 	upstream=$(private_upstream)
 	add_collision_topics
-	run_sndocs sync --family australia --upstream "$upstream"
+	run_docs sync --family australia --upstream "$upstream"
 	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
 
-	routing="$SNDOCS_TEST_TMP/routing.tsv"
+	routing="$DOCS_TEST_TMP/routing.tsv"
 	printf 'collision-topic\tplatform-security\taccess-control/access-control-rules.md\tthe unlinked twin of legacy/access-control-rules.md\n' \
 		>"$routing"
 
-	run_sndocs verify --family australia --routing "$routing"
+	run_docs verify --family australia --routing "$routing"
 	[ "$RUN_STATUS" -ne 0 ] || fail 'verify should report drift when only the same-basename sibling is linked'
 	assert_contains "$RUN_OUT" '"type":"unlinked-from-index"'
 	assert_contains "$RUN_OUT" '"concept":"collision-topic"'
@@ -160,23 +160,23 @@ test_a_basename_collision_does_not_mask_an_unlinked_entry() {
 
 test_exits_non_zero_when_any_discrepancy_is_found_zero_when_clean() {
 	sync_australia
-	routing="$SNDOCS_TEST_TMP/routing.tsv"
+	routing="$DOCS_TEST_TMP/routing.tsv"
 	write_test_routing "$routing"
-	run_sndocs verify --family australia --routing "$routing"
+	run_docs verify --family australia --routing "$routing"
 	[ "$RUN_STATUS" -ne 0 ] || fail 'verify should exit non-zero with three known discrepancies'
 
-	clean="$SNDOCS_TEST_TMP/clean-routing.tsv"
+	clean="$DOCS_TEST_TMP/clean-routing.tsv"
 	printf 'acl-evaluation\tplatform-security\tacl-rules.md\tbaseline entry\n' >"$clean"
-	run_sndocs verify --family australia --routing "$clean"
+	run_docs verify --family australia --routing "$clean"
 	assert_equals 0 "$RUN_STATUS" "verify should exit zero when nothing has drifted: $RUN_ERR"
 	assert_not_contains "$RUN_OUT" '"type"' 'a clean routing table should report no discrepancies'
 }
 
 test_names_each_discrepancy_specifically_enough_to_act_on() {
 	sync_australia
-	routing="$SNDOCS_TEST_TMP/routing.tsv"
+	routing="$DOCS_TEST_TMP/routing.tsv"
 	write_test_routing "$routing"
-	run_sndocs verify --family australia --routing "$routing"
+	run_docs verify --family australia --routing "$routing"
 
 	# Every record carries concept, publication, entry_path and a human detail
 	# — enough to find and fix the row without opening the routing table.
@@ -186,14 +186,14 @@ test_names_each_discrepancy_specifically_enough_to_act_on() {
 
 test_runs_against_the_cache_without_a_network_round_trip_per_entry() {
 	sync_australia
-	routing="$SNDOCS_TEST_TMP/routing.tsv"
+	routing="$DOCS_TEST_TMP/routing.tsv"
 	write_test_routing "$routing"
 
 	# platform-security has not been widened — only its index is in the
 	# initial cone — yet its entries resolve correctly, proving verify reads
 	# tree structure the blobless clone already fetched rather than pulling
 	# each entry's blob on demand.
-	run_sndocs status --family australia
+	run_docs status --family australia
 	assert_equals 'api-reference' "$(json_array "$RUN_OUT" publications)" \
 		'platform-security should not be widened for this case'
 
@@ -201,7 +201,7 @@ test_runs_against_the_cache_without_a_network_round_trip_per_entry() {
 	# git to the file protocol, and the only fixture upstream configured for
 	# this family is the one already cloned from. A command that needed a
 	# further round trip per entry would have nothing left to reach.
-	run_sndocs verify --family australia --routing "$routing"
+	run_docs verify --family australia --routing "$routing"
 	assert_equals 1 "$RUN_STATUS" "verify should exit 1 for known discrepancies, not fail some other way: $RUN_ERR"
 	assert_contains "$RUN_OUT" '"type":"publication-missing"'
 	assert_contains "$RUN_OUT" '"type":"entry-missing"'
@@ -209,28 +209,28 @@ test_runs_against_the_cache_without_a_network_round_trip_per_entry() {
 
 test_states_the_structural_only_limitation_in_its_own_output() {
 	sync_australia
-	routing="$SNDOCS_TEST_TMP/routing.tsv"
+	routing="$DOCS_TEST_TMP/routing.tsv"
 	write_test_routing "$routing"
-	run_sndocs verify --family australia --routing "$routing"
+	run_docs verify --family australia --routing "$routing"
 	assert_contains "$RUN_ERR" 'structure only'
 
-	run_sndocs help
+	run_docs help
 	assert_equals 0 "$RUN_STATUS" "help should exit zero: $RUN_ERR"
 	assert_contains "$RUN_OUT" 'verify'
 	assert_contains "$RUN_OUT" 'Structural drift only'
 }
 
 test_reports_a_missing_cache_clearly_and_exits_non_zero() {
-	routing="$SNDOCS_TEST_TMP/routing.tsv"
+	routing="$DOCS_TEST_TMP/routing.tsv"
 	write_test_routing "$routing"
-	run_sndocs verify --family australia --routing "$routing"
+	run_docs verify --family australia --routing "$routing"
 	[ "$RUN_STATUS" -ne 0 ] || fail 'verify should exit non-zero when there is no cache'
-	assert_contains "$RUN_ERR" 'sndocs sync'
+	assert_contains "$RUN_ERR" 'docs sync'
 }
 
 test_refuses_a_routing_file_that_does_not_exist() {
 	sync_australia
-	run_sndocs verify --family australia --routing "$SNDOCS_TEST_TMP/nonesuch.tsv"
+	run_docs verify --family australia --routing "$DOCS_TEST_TMP/nonesuch.tsv"
 	[ "$RUN_STATUS" -ne 0 ] || fail 'verify should exit non-zero for a missing routing file'
 	assert_contains "$RUN_ERR" 'nonesuch.tsv'
 }

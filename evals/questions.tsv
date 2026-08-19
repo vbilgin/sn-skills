@@ -1,4 +1,4 @@
-# Golden question set for skills/sndocs. Tab-separated. `#` starts a comment; blank lines
+# Golden question set for skills/docs. Tab-separated. `#` starts a comment; blank lines
 # ignored.
 #
 # Every topic path named here was verified against the australia branch (and, for the
@@ -12,7 +12,7 @@
 # Columns:
 #   id             short, stable, kebab-case
 #   category       lookup | routing | synonym | api-slice | family | absent | empty | no-trigger
-#   family_pin     family to pin via a temporary project .sndocs file, or "-" for the default
+#   family_pin     family to pin via a temporary project .docs file, or "-" for the default
 #                  (newest) family
 #   question       the prompt given to the agent verbatim
 #   expect_topics  comma-separated substrings that must all appear somewhere in the agent's

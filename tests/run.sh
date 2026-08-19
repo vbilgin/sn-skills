@@ -12,34 +12,34 @@ set -eu
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 
-SNDOCS_BIN="$root/bin/sndocs"
-SNDOCS_TEST_LIB="$root/tests/lib"
-export SNDOCS_BIN SNDOCS_TEST_LIB
+DOCS_BIN="$root/bin/docs"
+DOCS_TEST_LIB="$root/tests/lib"
+export DOCS_BIN DOCS_TEST_LIB
 
 GIT_ALLOW_PROTOCOL=file
 GIT_TERMINAL_PROMPT=0
 export GIT_ALLOW_PROTOCOL GIT_TERMINAL_PROMPT
 
-[ -x "$SNDOCS_BIN" ] || {
-	printf 'not executable: %s\n' "$SNDOCS_BIN" >&2
+[ -x "$DOCS_BIN" ] || {
+	printf 'not executable: %s\n' "$DOCS_BIN" >&2
 	exit 1
 }
 
-work=$(mktemp -d "${TMPDIR:-/tmp}/sndocs-suite.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/docs-suite.XXXXXX")
 trap 'rm -rf "$work"' EXIT INT TERM
 
 # The suite's own git operations must not read the developer's global config,
-# and family resolution must not read the developer's own sndocs configuration.
+# and family resolution must not read the developer's own docs configuration.
 HOME="$work/suite-home"
 XDG_CONFIG_HOME="$work/suite-home/.config"
 mkdir -p "$HOME"
 export HOME XDG_CONFIG_HOME
 
-. "$SNDOCS_TEST_LIB/fixture.sh"
+. "$DOCS_TEST_LIB/fixture.sh"
 
-SNDOCS_TEST_FIXTURE="$work/upstream"
-export SNDOCS_TEST_FIXTURE
-fixture_build "$SNDOCS_TEST_FIXTURE"
+DOCS_TEST_FIXTURE="$work/upstream"
+export DOCS_TEST_FIXTURE
+fixture_build "$DOCS_TEST_FIXTURE"
 
 if [ "$#" -eq 0 ]; then
 	set -- "$root"/tests/*.test.sh

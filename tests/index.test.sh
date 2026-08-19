@@ -2,10 +2,10 @@
 # Heading index: `index` makes the cache's topics greppable without reading
 # publication indexes.
 set -u
-. "$SNDOCS_TEST_LIB/harness.sh"
+. "$DOCS_TEST_LIB/harness.sh"
 
 sync_australia() {
-	run_sndocs sync --family australia --upstream "$(fixture_upstream)"
+	run_docs sync --family australia --upstream "$(fixture_upstream)"
 	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
 }
 
@@ -15,7 +15,7 @@ index_path() {
 
 test_produces_one_record_per_cached_topic() {
 	sync_australia
-	run_sndocs index --family australia
+	run_docs index --family australia
 	assert_equals 0 "$RUN_STATUS" "index should exit zero: $RUN_ERR"
 
 	assert_file_exists "$(index_path)"
@@ -28,7 +28,7 @@ test_produces_one_record_per_cached_topic() {
 
 test_records_carry_path_title_product_area_and_canonical_url() {
 	sync_australia
-	run_sndocs index --family australia
+	run_docs index --family australia
 	assert_equals 0 "$RUN_STATUS" "index should exit zero: $RUN_ERR"
 
 	record=$(grep 'c_GlideSystemAPI.md' "$(index_path)")
@@ -40,7 +40,7 @@ test_records_carry_path_title_product_area_and_canonical_url() {
 
 test_records_are_greppable_as_plain_text() {
 	sync_australia
-	run_sndocs index --family australia
+	run_docs index --family australia
 
 	# No JSON tooling required: a heading is found by grepping for its text.
 	assert_contains "$(grep -F 'GlideSystem - getUserID()' "$(index_path)")" \
@@ -49,7 +49,7 @@ test_records_are_greppable_as_plain_text() {
 
 test_method_level_headings_inside_large_api_files_appear_individually() {
 	sync_australia
-	run_sndocs index --family australia
+	run_docs index --family australia
 
 	record=$(grep 'c_GlideRecordAPI.md' "$(index_path)")
 	assert_contains "$record" '## GlideRecord - method01(String name, Object value)'
@@ -62,7 +62,7 @@ test_method_level_headings_inside_large_api_files_appear_individually() {
 
 test_captures_first_and_second_level_headings_only() {
 	sync_australia
-	run_sndocs index --family australia
+	run_docs index --family australia
 
 	record=$(grep '"path":"markdown/api-reference/index.md"' "$(index_path)")
 	assert_contains "$record" '"# API reference"'
@@ -70,10 +70,10 @@ test_captures_first_and_second_level_headings_only() {
 
 test_flags_an_empty_file_rather_than_reporting_it_as_undocumented() {
 	sync_australia
-	run_sndocs widen --family australia --publication administer
+	run_docs widen --family australia --publication administer
 	assert_equals 0 "$RUN_STATUS" "widen should exit zero: $RUN_ERR"
 
-	run_sndocs index --family australia
+	run_docs index --family australia
 	assert_equals 0 "$RUN_STATUS" "index should exit zero: $RUN_ERR"
 
 	record=$(grep 'empty-topic.md' "$(index_path)")
@@ -91,9 +91,9 @@ test_missing_frontmatter_fields_produce_a_usable_record() {
 	git -C "$upstream_dir" -c user.name='t' -c user.email='t@example.invalid' \
 		-c commit.gpgsign=false commit -qam 'docs: a topic missing product_area'
 
-	run_sndocs sync --family australia --upstream "$upstream"
+	run_docs sync --family australia --upstream "$upstream"
 	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
-	run_sndocs index --family australia
+	run_docs index --family australia
 	assert_equals 0 "$RUN_STATUS" "index should exit zero even with missing frontmatter: $RUN_ERR"
 
 	record=$(grep 'c_NoProductArea.md' "$(index_path)")
@@ -111,9 +111,9 @@ test_crlf_line_endings_do_not_break_frontmatter_or_headings() {
 	git -C "$upstream_dir" -c user.name='t' -c user.email='t@example.invalid' \
 		-c commit.gpgsign=false commit -qam 'docs: a CRLF-terminated topic'
 
-	run_sndocs sync --family australia --upstream "$upstream"
+	run_docs sync --family australia --upstream "$upstream"
 	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
-	run_sndocs index --family australia
+	run_docs index --family australia
 	assert_equals 0 "$RUN_STATUS" "index should exit zero: $RUN_ERR"
 
 	record=$(grep 'c_CRLFTopic.md' "$(index_path)")
@@ -132,9 +132,9 @@ test_headings_inside_fenced_code_blocks_are_not_captured() {
 	git -C "$upstream_dir" -c user.name='t' -c user.email='t@example.invalid' \
 		-c commit.gpgsign=false commit -qam 'docs: a topic with a fenced code sample'
 
-	run_sndocs sync --family australia --upstream "$upstream"
+	run_docs sync --family australia --upstream "$upstream"
 	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
-	run_sndocs index --family australia
+	run_docs index --family australia
 	assert_equals 0 "$RUN_STATUS" "index should exit zero: $RUN_ERR"
 
 	record=$(grep 'c_FencedTopic.md' "$(index_path)")
@@ -148,7 +148,7 @@ test_an_unreadable_file_is_flagged_distinctly_from_an_empty_one() {
 	target="$(cache_root)/australia/repo/markdown/api-reference/c_GlideSystemAPI.md"
 	chmod 000 "$target"
 
-	run_sndocs index --family australia
+	run_docs index --family australia
 	assert_equals 0 "$RUN_STATUS" "index should exit zero even with an unreadable file: $RUN_ERR"
 
 	record=$(grep 'c_GlideSystemAPI.md' "$(index_path)")
@@ -158,7 +158,7 @@ test_an_unreadable_file_is_flagged_distinctly_from_an_empty_one() {
 
 test_written_inside_the_cache_not_the_git_working_tree() {
 	sync_australia
-	run_sndocs index --family australia
+	run_docs index --family australia
 	assert_equals 0 "$RUN_STATUS" "index should exit zero: $RUN_ERR"
 
 	assert_file_exists "$(index_path)"
@@ -171,13 +171,13 @@ test_written_inside_the_cache_not_the_git_working_tree() {
 
 test_rerunning_after_widening_covers_the_newly_added_publication() {
 	sync_australia
-	run_sndocs index --family australia
+	run_docs index --family australia
 	before=$(wc -l <"$(index_path)" | tr -d '[:space:]')
 
-	run_sndocs widen --family australia --publication platform-security
+	run_docs widen --family australia --publication platform-security
 	assert_equals 0 "$RUN_STATUS" "widen should exit zero: $RUN_ERR"
 
-	run_sndocs index --family australia
+	run_docs index --family australia
 	assert_equals 0 "$RUN_STATUS" "index should exit zero: $RUN_ERR"
 	after=$(wc -l <"$(index_path)" | tr -d '[:space:]')
 
@@ -187,10 +187,10 @@ test_rerunning_after_widening_covers_the_newly_added_publication() {
 
 test_rerunning_with_no_changes_produces_identical_output() {
 	sync_australia
-	run_sndocs index --family australia
+	run_docs index --family australia
 	first=$(cat "$(index_path)")
 
-	run_sndocs index --family australia
+	run_docs index --family australia
 	assert_equals 0 "$RUN_STATUS" "index should exit zero: $RUN_ERR"
 	second=$(cat "$(index_path)")
 
@@ -199,9 +199,9 @@ test_rerunning_with_no_changes_produces_identical_output() {
 }
 
 test_reports_a_missing_cache_clearly_and_exits_non_zero() {
-	run_sndocs index --family australia
+	run_docs index --family australia
 	[ "$RUN_STATUS" -ne 0 ] || fail 'index should exit non-zero when there is no cache'
-	assert_contains "$RUN_ERR" 'sndocs sync'
+	assert_contains "$RUN_ERR" 'docs sync'
 }
 
 run_tests \

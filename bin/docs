@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# sndocs — maintains the Skill's local Cache of ServiceNow product
+# docs — maintains the Skill's local Cache of ServiceNow product
 # documentation, one Cache per Family.
 #
 # Dependency-free POSIX shell by design: no Node, no Python virtual
@@ -13,41 +13,41 @@
 
 set -eu
 
-SNDOCS_DEFAULT_UPSTREAM='https://github.com/ServiceNow/ServiceNowDocs.git'
+DOCS_DEFAULT_UPSTREAM='https://github.com/ServiceNow/ServiceNowDocs.git'
 
 # The newest family as of the last time this file was touched. Used only when
 # nothing is configured, and never silently: falling back to it is a guess
 # about which release an instance runs, and the guess is warned about.
-SNDOCS_NEWEST_FAMILY='australia'
+DOCS_NEWEST_FAMILY='australia'
 
 # The project-level configuration file, looked for at and above the working
 # directory. Family is a property of the codebase rather than of the machine,
 # so this is the documented place to pin one.
-SNDOCS_PROJECT_CONFIG='.sndocs'
+DOCS_PROJECT_CONFIG='.docs'
 
 # Initial Cone: the API reference publication, plus every publication index.
 # Non-cone sparse patterns, because "every publication's index" is a glob
 # across directories and cone mode can only express directory prefixes.
-SNDOCS_INDEX_PATTERN='/markdown/*/index.md'
+DOCS_INDEX_PATTERN='/markdown/*/index.md'
 
 # Seven days, against upstream's roughly monthly publication cadence — enough
 # margin that a refresh is never the reason an answer is late, and short enough
 # that a family that has just shipped is picked up without asking.
-SNDOCS_STALE_AFTER=604800
+DOCS_STALE_AFTER=604800
 
 usage() {
 	cat <<'EOF'
-sndocs — local cache of ServiceNow product documentation, one cache per family.
+docs — local cache of ServiceNow product documentation, one cache per family.
 
 Usage:
-  sndocs sync    [--family <family>] [--upstream <repository>]
-  sndocs widen   [--family <family>] --publication <publication> ...
-  sndocs refresh [--family <family>]
-  sndocs status  [--family <family>]
-  sndocs index   [--family <family>]
-  sndocs family  [--family <family>]
-  sndocs verify  [--family <family>] [--routing <file>]
-  sndocs help
+  docs sync    [--family <family>] [--upstream <repository>]
+  docs widen   [--family <family>] --publication <publication> ...
+  docs refresh [--family <family>]
+  docs status  [--family <family>]
+  docs index   [--family <family>]
+  docs family  [--family <family>]
+  docs verify  [--family <family>] [--routing <file>]
+  docs help
 
 Commands:
   family   Report the family every other command would work on, and where that
@@ -93,11 +93,11 @@ Options:
                           resolved as described below.
   --publication <name>    Publication to add to the cache. Repeat for several.
   --routing <file>        Routing table to verify. Defaults to the one shipped
-                          next to this script, skills/sndocs/routing.tsv. The
+                          next to this script, skills/docs/routing.tsv. The
                           override exists so the test suite can verify against
                           a small fixture table rather than the real one.
   --upstream <repository> Upstream documentation repository to clone from.
-                          Defaults to $SNDOCS_UPSTREAM, else
+                          Defaults to $DOCS_UPSTREAM, else
                           https://github.com/ServiceNow/ServiceNowDocs.git.
                           This override exists so the test suite can point at a
                           small local fixture instead of downloading 269 MB of
@@ -106,12 +106,12 @@ Options:
 
 Family resolution, highest wins:
   1. --family on the invocation.
-  2. The nearest .sndocs file at or above the working directory. This is the
+  2. The nearest .docs file at or above the working directory. This is the
      documented place to pin a family: family is a property of the codebase,
      not of the machine, so committing it means teammates and agents inherit
      it, and changing directory between client repositories changes the
      documentation set with no other action.
-  3. $XDG_CONFIG_HOME/sndocs/config, for a machine-wide default.
+  3. $XDG_CONFIG_HOME/docs/config, for a machine-wide default.
   4. The newest family, with a warning that no family was configured.
 
   Both files are key=value lines; `#` starts a comment. The key is `family`.
@@ -124,14 +124,14 @@ Family resolution, highest wins:
   quietly answer from a different family.
 
 Environment:
-  SNDOCS_UPSTREAM   Default for --upstream.
-  SNDOCS_NOW        Unix timestamp to treat as the current time. Exists so the
+  DOCS_UPSTREAM     Default for --upstream.
+  DOCS_NOW          Unix timestamp to treat as the current time. Exists so the
                     test suite can cross the seven-day staleness window without
                     waiting a week. Part of the supported interface.
   XDG_CACHE_HOME    Cache location root (default: ~/.cache). The cache lives at
-                    $XDG_CACHE_HOME/sndocs/<family>.
+                    $XDG_CACHE_HOME/docs/<family>.
   XDG_CONFIG_HOME   Configuration root (default: ~/.config). The user-level
-                    configuration lives at $XDG_CONFIG_HOME/sndocs/config.
+                    configuration lives at $XDG_CONFIG_HOME/docs/config.
 
 Documentation is fetched at runtime and never redistributed. Every cache
 records which upstream snapshot it came from, so a stale answer is
@@ -140,29 +140,29 @@ EOF
 }
 
 die() {
-	printf 'sndocs: %s\n' "$1" >&2
+	printf 'docs: %s\n' "$1" >&2
 	exit 1
 }
 
 note() {
-	printf 'sndocs: %s\n' "$1" >&2
+	printf 'docs: %s\n' "$1" >&2
 }
 
 # ------------------------------------------------------------------ locations
 
 cache_root() {
-	printf '%s/sndocs\n' "${XDG_CACHE_HOME:-$HOME/.cache}"
+	printf '%s/docs\n' "${XDG_CACHE_HOME:-$HOME/.cache}"
 }
 
 config_root() {
-	printf '%s/sndocs\n' "${XDG_CONFIG_HOME:-$HOME/.config}"
+	printf '%s/docs\n' "${XDG_CONFIG_HOME:-$HOME/.config}"
 }
 
 # default_routing_file — the curated routing table shipped next to this
 # script, resolved from $0 rather than assumed to be the working directory:
 # `verify` has to find it regardless of where it is invoked from.
 default_routing_file() {
-	printf '%s/skills/sndocs/routing.tsv\n' "$(cd "$(dirname "$0")/.." && pwd)"
+	printf '%s/skills/docs/routing.tsv\n' "$(cd "$(dirname "$0")/.." && pwd)"
 }
 
 user_config_file() {
@@ -253,8 +253,8 @@ kv_read() {
 find_project_config() {
 	_dir=$(pwd)
 	while :; do
-		if [ -f "$_dir/$SNDOCS_PROJECT_CONFIG" ]; then
-			printf '%s/%s\n' "${_dir%/}" "$SNDOCS_PROJECT_CONFIG"
+		if [ -f "$_dir/$DOCS_PROJECT_CONFIG" ]; then
+			printf '%s/%s\n' "${_dir%/}" "$DOCS_PROJECT_CONFIG"
 			return 0
 		fi
 		[ "$_dir" != '/' ] || return 1
@@ -288,7 +288,7 @@ family_context() {
 		_source=user
 		_source_path=$_file
 	else
-		_family=$SNDOCS_NEWEST_FAMILY
+		_family=$DOCS_NEWEST_FAMILY
 		_source=default
 	fi
 
@@ -302,7 +302,7 @@ family_context() {
 		note "family $_family, from $_source_path"
 		;;
 	default)
-		note "no family configured; using the newest family '$_family'. Pin one with 'family=<family>' in $SNDOCS_PROJECT_CONFIG at the root of this repository"
+		note "no family configured; using the newest family '$_family'. Pin one with 'family=<family>' in $DOCS_PROJECT_CONFIG at the root of this repository"
 		;;
 	esac
 
@@ -338,12 +338,12 @@ die_not_published() {
 
 # ----------------------------------------------------------------------- time
 #
-# One clock, read in one place. SNDOCS_NOW overrides it so the seven-day
+# One clock, read in one place. DOCS_NOW overrides it so the seven-day
 # staleness window can be crossed in a test without waiting a week.
 
 now_epoch() {
-	if [ -n "${SNDOCS_NOW:-}" ]; then
-		printf '%s\n' "$SNDOCS_NOW"
+	if [ -n "${DOCS_NOW:-}" ]; then
+		printf '%s\n' "$DOCS_NOW"
 	else
 		date -u +%s
 	fi
@@ -496,7 +496,7 @@ cone_publication_indexes() {
 assert_cache_exists() {
 	# assert_cache_exists <dir> <family>
 	[ -d "$1/repo/.git" ] && [ -f "$1/snapshot" ] ||
-		die "no cache for family '$2'. Run: sndocs sync --family $2"
+		die "no cache for family '$2'. Run: docs sync --family $2"
 }
 
 cache_age() {
@@ -532,7 +532,7 @@ refresh_cache() {
 	if fetch_family "$1" "$2"; then
 		_commit=$(snapshot_read "$1/snapshot" commit) || _commit='?'
 		_fetched_at=$(snapshot_read "$1/snapshot" fetched_at) || _fetched_at='?'
-		printf 'sndocs: refreshed %s to %s (%s)\n' \
+		printf 'docs: refreshed %s to %s (%s)\n' \
 			"$2" "$_commit" "$_fetched_at" >&2
 	else
 		# A fetch fails both when upstream is unreachable and when the family
@@ -546,7 +546,7 @@ refresh_cache() {
 			die_out_of_support "$_upstream" "$2"
 		fi
 
-		printf 'sndocs: could not reach upstream; keeping the cache for %s, %s\n' \
+		printf 'docs: could not reach upstream; keeping the cache for %s, %s\n' \
 			"$2" "$(age_human "$3")" >&2
 	fi
 }
@@ -555,7 +555,7 @@ refresh_cache() {
 
 cmd_sync() {
 	cli_family=''
-	upstream=${SNDOCS_UPSTREAM:-$SNDOCS_DEFAULT_UPSTREAM}
+	upstream=${DOCS_UPSTREAM:-$DOCS_DEFAULT_UPSTREAM}
 
 	while [ "$#" -gt 0 ]; do
 		case $1 in
@@ -597,8 +597,8 @@ EOF
 		fi
 
 		age=$(cache_age "$dir" "$family")
-		if [ "$age" -lt "$SNDOCS_STALE_AFTER" ]; then
-			printf 'sndocs: cache for %s is present at %s and %s\n' \
+		if [ "$age" -lt "$DOCS_STALE_AFTER" ]; then
+			printf 'docs: cache for %s is present at %s and %s\n' \
 				"$family" "$dir" "$(age_human "$age")" >&2
 			return 0
 		fi
@@ -647,7 +647,7 @@ EOF
 	git -C "$staging" sparse-checkout init --no-cone >/dev/null 2>&1 ||
 		die 'git is too old for sparse checkout; git 2.25 or newer is required'
 	git -C "$staging" sparse-checkout set \
-		"$SNDOCS_INDEX_PATTERN" \
+		"$DOCS_INDEX_PATTERN" \
 		'/markdown/api-reference/' >/dev/null
 	git -C "$staging" checkout "$family" >/dev/null 2>&1 ||
 		die "could not check out family '$family'"
@@ -663,7 +663,7 @@ EOF
 	snapshot_write "$dir/snapshot" "$family" "$upstream" "$commit" \
 		"$fetched_at" "$fetched_epoch"
 
-	printf 'sndocs: cached %s at %s (%s)\n' "$family" "$commit" "$fetched_at" >&2
+	printf 'docs: cached %s at %s (%s)\n' "$family" "$commit" "$fetched_at" >&2
 }
 
 # ---------------------------------------------------------------------- widen
@@ -717,7 +717,7 @@ EOF
 	# while the rest of the cache moved on, would make the cone internally
 	# inconsistent about which snapshot it holds.
 	age=$(cache_age "$dir" "$family")
-	if [ "$age" -ge "$SNDOCS_STALE_AFTER" ]; then
+	if [ "$age" -ge "$DOCS_STALE_AFTER" ]; then
 		refresh_cache "$dir" "$family" "$age"
 	fi
 
@@ -743,7 +743,7 @@ EOF
 	done
 
 	if [ -z "$wanted" ]; then
-		printf 'sndocs: cache for %s already holds every publication asked for\n' \
+		printf 'docs: cache for %s already holds every publication asked for\n' \
 			"$family" >&2
 		return 0
 	fi
@@ -764,7 +764,7 @@ EOF
 		die "could not widen the cache for family '$family'"
 	fi
 
-	printf 'sndocs: cache for %s now holds %s\n' \
+	printf 'docs: cache for %s now holds %s\n' \
 		"$family" "$(printf '%s' "$wanted" | tr '\n' ' ')" >&2
 }
 
@@ -837,7 +837,7 @@ EOF
 	# Reported, never suppressed: an answer drawn from a stale cache is only
 	# attributable if the caller is told how old the cache is.
 	age=$(cache_age "$dir" "$family")
-	if [ "$age" -lt "$SNDOCS_STALE_AFTER" ]; then stale=false; else stale=true; fi
+	if [ "$age" -lt "$DOCS_STALE_AFTER" ]; then stale=false; else stale=true; fi
 
 	# status reports; it does not fetch. A stale cache is named as stale here
 	# and refreshed by sync, widen, or refresh — a command whose whole job is
@@ -854,7 +854,7 @@ EOF
 	printf '  "fetched_at": "%s",\n' "$(json_escape "$fetched_at")"
 	printf '  "age_seconds": %s,\n' "$age"
 	printf '  "stale": %s,\n' "$stale"
-	printf '  "stale_after_seconds": %s,\n' "$SNDOCS_STALE_AFTER"
+	printf '  "stale_after_seconds": %s,\n' "$DOCS_STALE_AFTER"
 	printf '  "upstream": "%s",\n' "$(json_escape "$upstream")"
 	printf '  "cache": "%s",\n' "$(json_escape "$dir/repo")"
 	printf '  "publications": ['
@@ -1013,7 +1013,7 @@ EOF
 	rm -f "$list"
 
 	count=$(wc -l <"$(index_file "$dir")" | tr -d '[:space:]')
-	printf 'sndocs: indexed %s topics for %s at %s\n' \
+	printf 'docs: indexed %s topics for %s at %s\n' \
 		"$count" "$family" "$(index_file "$dir")" >&2
 }
 
@@ -1229,7 +1229,7 @@ family) cmd_family "$@" ;;
 verify) cmd_verify "$@" ;;
 help | -h | --help) usage ;;
 *)
-	printf 'sndocs: unknown command: %s\n\n' "$command" >&2
+	printf 'docs: unknown command: %s\n\n' "$command" >&2
 	usage >&2
 	exit 2
 	;;

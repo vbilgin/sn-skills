@@ -10,12 +10,12 @@
 #
 # Test files register their cases explicitly:
 #
-#     . "$SNDOCS_TEST_LIB/harness.sh"
+#     . "$DOCS_TEST_LIB/harness.sh"
 #     test_something() { ... }
 #     run_tests test_something
 
-: "${SNDOCS_BIN:?harness must be run through tests/run.sh}"
-: "${SNDOCS_TEST_FIXTURE:?harness must be run through tests/run.sh}"
+: "${DOCS_BIN:?harness must be run through tests/run.sh}"
+: "${DOCS_TEST_FIXTURE:?harness must be run through tests/run.sh}"
 
 # ---------------------------------------------------------------- assertions
 
@@ -56,16 +56,16 @@ assert_path_missing() {
 	return 0
 }
 
-# ------------------------------------------------------------- running sndocs
+# ------------------------------------------------------------- running docs
 
-# run_sndocs <args...> — sets RUN_STATUS, RUN_OUT (stdout), RUN_ERR (stderr).
+# run_docs <args...> — sets RUN_STATUS, RUN_OUT (stdout), RUN_ERR (stderr).
 # Never fails the test itself; assert on RUN_STATUS.
-run_sndocs() {
+run_docs() {
 	RUN_STATUS=0
-	"$SNDOCS_BIN" "$@" >"$SNDOCS_TEST_TMP/stdout" 2>"$SNDOCS_TEST_TMP/stderr" ||
+	"$DOCS_BIN" "$@" >"$DOCS_TEST_TMP/stdout" 2>"$DOCS_TEST_TMP/stderr" ||
 		RUN_STATUS=$?
-	RUN_OUT=$(cat "$SNDOCS_TEST_TMP/stdout")
-	RUN_ERR=$(cat "$SNDOCS_TEST_TMP/stderr")
+	RUN_OUT=$(cat "$DOCS_TEST_TMP/stdout")
+	RUN_ERR=$(cat "$DOCS_TEST_TMP/stderr")
 }
 
 # The clock a case runs against. Fixed rather than derived from the real one,
@@ -74,34 +74,34 @@ run_sndocs() {
 TEST_EPOCH=1800000000 # 2027-01-15T08:00:00Z
 DAY_SECONDS=86400
 
-# run_sndocs_at <seconds-after-TEST_EPOCH> <args...> — runs the executable at a
+# run_docs_at <seconds-after-TEST_EPOCH> <args...> — runs the executable at a
 # chosen point on that clock, for exercising the staleness window without
-# waiting a week. Sets the same RUN_* variables as run_sndocs.
-run_sndocs_at() {
+# waiting a week. Sets the same RUN_* variables as run_docs.
+run_docs_at() {
 	_offset=$1
 	shift
-	SNDOCS_NOW=$((TEST_EPOCH + _offset))
-	export SNDOCS_NOW
-	run_sndocs "$@"
-	unset SNDOCS_NOW
+	DOCS_NOW=$((TEST_EPOCH + _offset))
+	export DOCS_NOW
+	run_docs "$@"
+	unset DOCS_NOW
 }
 
 # The upstream override, pointed at the fixture rather than the real upstream.
 fixture_upstream() {
-	printf 'file://%s\n' "$SNDOCS_TEST_FIXTURE"
+	printf 'file://%s\n' "$DOCS_TEST_FIXTURE"
 }
 
 # private_upstream — a per-case copy of the fixture, printed as an upstream
 # override. The suite's fixture is shared and must stay pristine; a case that
 # needs upstream to move on, or to become unreachable, mutates a copy.
 private_upstream() {
-	cp -R "$SNDOCS_TEST_FIXTURE" "$SNDOCS_TEST_TMP/upstream"
-	printf 'file://%s\n' "$SNDOCS_TEST_TMP/upstream"
+	cp -R "$DOCS_TEST_FIXTURE" "$DOCS_TEST_TMP/upstream"
+	printf 'file://%s\n' "$DOCS_TEST_TMP/upstream"
 }
 
 # private_upstream_path — where private_upstream put its copy.
 private_upstream_path() {
-	printf '%s\n' "$SNDOCS_TEST_TMP/upstream"
+	printf '%s\n' "$DOCS_TEST_TMP/upstream"
 }
 
 # upstream_advance <family> — adds a commit to the private upstream copy, so a
@@ -112,7 +112,7 @@ upstream_advance() {
 	printf '\n- [Login rules](login-rules.md)\n' \
 		>>"$_dir/markdown/platform-security/index.md"
 	git -C "$_dir" \
-		-c user.name='sndocs fixture' \
+		-c user.name='docs fixture' \
 		-c user.email='fixture@example.invalid' \
 		-c commit.gpgsign=false \
 		commit -qam 'docs: a later snapshot'
@@ -136,7 +136,7 @@ take_upstream_offline() {
 # than asked of the executable, so that a change to the cache layout fails a
 # test instead of silently moving what the tests assert against.
 cache_root() {
-	printf '%s/sndocs\n' "$XDG_CACHE_HOME"
+	printf '%s/docs\n' "$XDG_CACHE_HOME"
 }
 
 # ---------------------------------------------------------- family resolution
@@ -145,8 +145,8 @@ cache_root() {
 # location the sandbox XDG_CONFIG_HOME resolves to. Spelled out here rather
 # than asked of the executable, for the same reason as cache_root.
 write_user_config() {
-	mkdir -p "$XDG_CONFIG_HOME/sndocs"
-	printf '%s\n' "$@" >"$XDG_CONFIG_HOME/sndocs/config"
+	mkdir -p "$XDG_CONFIG_HOME/docs"
+	printf '%s\n' "$@" >"$XDG_CONFIG_HOME/docs/config"
 }
 
 # write_project_config <dir> <line...> — a project-level configuration file in
@@ -155,14 +155,14 @@ write_project_config() {
 	_dir=$1
 	shift
 	mkdir -p "$_dir"
-	printf '%s\n' "$@" >"$_dir/.sndocs"
+	printf '%s\n' "$@" >"$_dir/.docs"
 }
 
 # run_family <args...> — resolves the family from wherever the case has left
 # the working directory. Sets the usual RUN_* variables, so both the resolved
 # family and the source it came from can be asserted on.
 run_family() {
-	run_sndocs family "$@"
+	run_docs family "$@"
 	assert_equals 0 "$RUN_STATUS" "family should exit zero: $RUN_ERR"
 }
 
@@ -207,15 +207,15 @@ run_tests() {
 		_name=$(printf '%s\n' "$_case" | sed -e 's/^test_//' -e 's/_/ /g')
 
 		# One sandbox per case: fresh HOME, fresh cache, fresh cwd.
-		SNDOCS_TEST_TMP=$(mktemp -d "${TMPDIR:-/tmp}/sndocs-case.XXXXXX")
-		export SNDOCS_TEST_TMP
+		DOCS_TEST_TMP=$(mktemp -d "${TMPDIR:-/tmp}/docs-case.XXXXXX")
+		export DOCS_TEST_TMP
 		(
-			HOME="$SNDOCS_TEST_TMP/home"
-			XDG_CACHE_HOME="$SNDOCS_TEST_TMP/home/.cache"
-			XDG_CONFIG_HOME="$SNDOCS_TEST_TMP/home/.config"
+			HOME="$DOCS_TEST_TMP/home"
+			XDG_CACHE_HOME="$DOCS_TEST_TMP/home/.cache"
+			XDG_CONFIG_HOME="$DOCS_TEST_TMP/home/.config"
 			export HOME XDG_CACHE_HOME XDG_CONFIG_HOME
-			mkdir -p "$HOME" "$SNDOCS_TEST_TMP/cwd"
-			cd "$SNDOCS_TEST_TMP/cwd" || exit 1
+			mkdir -p "$HOME" "$DOCS_TEST_TMP/cwd"
+			cd "$DOCS_TEST_TMP/cwd" || exit 1
 			"$_case"
 		)
 		if [ $? -eq 0 ]; then
@@ -224,7 +224,7 @@ run_tests() {
 			printf '  FAIL %s\n' "$_name"
 			_failed=$((_failed + 1))
 		fi
-		rm -rf "$SNDOCS_TEST_TMP"
+		rm -rf "$DOCS_TEST_TMP"
 	done
 
 	[ "$_failed" -eq 0 ] || exit 1

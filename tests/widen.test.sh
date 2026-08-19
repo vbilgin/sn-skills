@@ -1,15 +1,15 @@
 #!/bin/sh
 # Cone widening: the Cache extends to cover a Publication it does not hold.
 set -u
-. "$SNDOCS_TEST_LIB/harness.sh"
+. "$DOCS_TEST_LIB/harness.sh"
 
 sync_australia() {
-	run_sndocs sync --family australia --upstream "$(fixture_upstream)"
+	run_docs sync --family australia --upstream "$(fixture_upstream)"
 	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
 }
 
 cached_publications() {
-	run_sndocs status --family australia
+	run_docs status --family australia
 	assert_equals 0 "$RUN_STATUS" "status should exit zero: $RUN_ERR"
 	json_array "$RUN_OUT" publications
 }
@@ -18,7 +18,7 @@ test_adds_a_publication_and_leaves_the_existing_cone_intact() {
 	sync_australia
 	assert_equals 'api-reference' "$(cached_publications)"
 
-	run_sndocs widen --family australia --publication platform-security
+	run_docs widen --family australia --publication platform-security
 	assert_equals 0 "$RUN_STATUS" "widen should exit zero: $RUN_ERR"
 
 	expected='api-reference
@@ -37,7 +37,7 @@ platform-security'
 api-reference
 platform-security
 vocabulary'
-	run_sndocs status --family australia
+	run_docs status --family australia
 	assert_equals "$indexes" "$(json_array "$RUN_OUT" publication_indexes)" \
 		'widening should not cost the publication indexes'
 }
@@ -59,10 +59,10 @@ api-reference'
 
 test_pulls_only_the_new_content_rather_than_re_cloning() {
 	sync_australia
-	marker="$(cache_root)/australia/repo/.git/sndocs-not-a-re-clone"
+	marker="$(cache_root)/australia/repo/.git/docs-not-a-re-clone"
 	: >"$marker"
 
-	run_sndocs widen --family australia --publication platform-security
+	run_docs widen --family australia --publication platform-security
 	assert_equals 0 "$RUN_STATUS" "widen should exit zero: $RUN_ERR"
 
 	assert_file_exists "$marker" 'widening should extend the clone in place, not replace it'
@@ -72,14 +72,14 @@ test_widening_to_a_publication_already_cached_changes_nothing() {
 	sync_australia
 	before=$(cached_publications)
 
-	run_sndocs widen --family australia --publication api-reference
+	run_docs widen --family australia --publication api-reference
 	assert_equals 0 "$RUN_STATUS" "widen should exit zero for a publication already cached: $RUN_ERR"
 	assert_equals "$before" "$(cached_publications)"
 }
 
 test_adds_several_publications_in_one_widening() {
 	sync_australia
-	run_sndocs widen --family australia \
+	run_docs widen --family australia \
 		--publication platform-security --publication administer
 	assert_equals 0 "$RUN_STATUS" "widen should exit zero: $RUN_ERR"
 
@@ -91,7 +91,7 @@ platform-security'
 
 test_reports_what_upstream_publishes_separately_from_what_is_cached() {
 	sync_australia
-	run_sndocs status --family australia
+	run_docs status --family australia
 	assert_equals 0 "$RUN_STATUS" "status should exit zero: $RUN_ERR"
 
 	# The contract that stops a gap in the cache being reported as a gap in
@@ -107,7 +107,7 @@ vocabulary'
 
 test_refuses_a_publication_upstream_does_not_publish() {
 	sync_australia
-	run_sndocs widen --family australia --publication nonesuch
+	run_docs widen --family australia --publication nonesuch
 	[ "$RUN_STATUS" -ne 0 ] || fail 'widen should exit non-zero for a publication that does not exist upstream'
 
 	# Distinguishable from "not checked out": the wording has to say the
@@ -120,7 +120,7 @@ test_refuses_a_publication_upstream_does_not_publish() {
 
 test_refuses_a_publication_name_that_would_escape_the_cache_location() {
 	sync_australia
-	run_sndocs widen --family australia --publication ../../elsewhere
+	run_docs widen --family australia --publication ../../elsewhere
 	[ "$RUN_STATUS" -ne 0 ] || fail 'widen should reject a publication name containing a path'
 	assert_contains "$RUN_ERR" 'publication name'
 	assert_equals 'api-reference' "$(cached_publications)"
@@ -128,18 +128,18 @@ test_refuses_a_publication_name_that_would_escape_the_cache_location() {
 
 test_widening_a_stale_cache_refreshes_it_first() {
 	upstream=$(private_upstream)
-	run_sndocs_at 0 sync --family australia --upstream "$upstream"
+	run_docs_at 0 sync --family australia --upstream "$upstream"
 	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
 	advanced=$(upstream_advance australia)
 
 	# Widening is a use of the cache, so it crosses the staleness window the
 	# same way answering does — pulling a publication down at a snapshot the
 	# rest of the cache has moved past would make the cone incoherent.
-	run_sndocs_at "$((8 * DAY_SECONDS))" widen \
+	run_docs_at "$((8 * DAY_SECONDS))" widen \
 		--family australia --publication platform-security
 	assert_equals 0 "$RUN_STATUS" "widen should exit zero: $RUN_ERR"
 
-	run_sndocs_at "$((8 * DAY_SECONDS))" status --family australia
+	run_docs_at "$((8 * DAY_SECONDS))" status --family australia
 	assert_equals "$advanced" "$(json_field "$RUN_OUT" commit)" \
 		'widening a stale cache should refresh it first'
 	assert_contains "$(cat "$(cache_root)/australia/repo/markdown/platform-security/index.md")" \
@@ -150,11 +150,11 @@ test_widening_that_cannot_reach_upstream_leaves_the_cone_where_it_was() {
 	# Unlike answering from a cache, widening genuinely needs the content it
 	# does not have yet, so it fails rather than half-extending the cone.
 	upstream=$(private_upstream)
-	run_sndocs sync --family australia --upstream "$upstream"
+	run_docs sync --family australia --upstream "$upstream"
 	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
 	take_upstream_offline
 
-	run_sndocs widen --family australia --publication platform-security
+	run_docs widen --family australia --publication platform-security
 	[ "$RUN_STATUS" -ne 0 ] || fail 'widen should exit non-zero when the new content cannot be fetched'
 	assert_equals 'api-reference' "$(cached_publications)" \
 		'a failed widening should leave the cone where it was'
@@ -162,17 +162,17 @@ test_widening_that_cannot_reach_upstream_leaves_the_cone_where_it_was() {
 }
 
 test_reports_a_missing_cache_clearly_and_exits_non_zero() {
-	run_sndocs widen --family australia --publication platform-security
+	run_docs widen --family australia --publication platform-security
 	[ "$RUN_STATUS" -ne 0 ] || fail 'widen should exit non-zero when there is no cache'
-	assert_contains "$RUN_ERR" 'sndocs sync'
+	assert_contains "$RUN_ERR" 'docs sync'
 }
 
 test_widens_each_family_independently() {
 	sync_australia
-	run_sndocs sync --family zurich --upstream "$(fixture_upstream)"
+	run_docs sync --family zurich --upstream "$(fixture_upstream)"
 	assert_equals 0 "$RUN_STATUS" "zurich sync should exit zero: $RUN_ERR"
 
-	run_sndocs widen --family zurich --publication platform-security
+	run_docs widen --family zurich --publication platform-security
 	assert_equals 0 "$RUN_STATUS" "widen should exit zero: $RUN_ERR"
 
 	assert_equals 'api-reference' "$(cached_publications)" \

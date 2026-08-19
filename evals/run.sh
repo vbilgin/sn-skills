@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # evals/run.sh — drives a real agent non-interactively against the golden question set in
-# evals/questions.tsv and asserts on its tool-call stream, per skills/sndocs/SKILL.md's
+# evals/questions.tsv and asserts on its tool-call stream, per skills/docs/SKILL.md's
 # correctness contracts.
 #
 # The gate is retrieval-only: did the agent open the expected topic(s), on the expected family,
@@ -11,13 +11,13 @@
 # part of the shipped skill.
 #
 # Each case runs the agent with its working directory set to a fresh, empty temp directory (with
-# a .sndocs file when the case pins a family) — so a pass can never be explained by proximity to
+# a .docs file when the case pins a family) — so a pass can never be explained by proximity to
 # this repository's own working tree.
 
 set -eu
 
-: "${SNDOCS_ROOT:=$(cd "$(dirname "$0")/.." && pwd)}"
-EVALS_ROOT="$SNDOCS_ROOT/evals"
+: "${DOCS_ROOT:=$(cd "$(dirname "$0")/.." && pwd)}"
+EVALS_ROOT="$DOCS_ROOT/evals"
 
 AGENT=''
 QUESTIONS="$EVALS_ROOT/questions.tsv"
@@ -113,7 +113,7 @@ invoke_claude() {
 	(
 		cd "$_cwd"
 		timeout "$CASE_TIMEOUT" claude -p "$_q" \
-			--plugin-dir "$SNDOCS_ROOT" \
+			--plugin-dir "$DOCS_ROOT" \
 			--allowedTools "Bash Read Grep Glob Skill" \
 			--output-format stream-json --verbose </dev/null
 	) >"$_raw" 2>"$_raw.err" || true
@@ -197,8 +197,8 @@ reports_upstream_defect() {
 	flatten "$1" | grep -qiE 'empty|blank|broken|defect|truncated|build (issue|bug|defect)'
 }
 
-mentions_sndocs() {
-	grep -qi 'sndocs' "$1"
+mentions_docs() {
+	grep -qi 'docs' "$1"
 }
 
 # ------------------------------------------------------------------------------- case runner
@@ -212,14 +212,14 @@ run_case() {
 	_id=$1 _category=$2 _family_pin=$3 _question=$4 _expect_topics=$5 _expect_url=$6 _mode=$7
 
 	TOTAL=$((TOTAL + 1))
-	# Deliberately not named anything containing "sndocs": the no-retrieval assertion greps
+	# Deliberately not named anything containing "docs": the no-retrieval assertion greps
 	# the tool-call corpus for that string, and an agent that writes an output file echoes its
 	# own absolute path — including this directory's name — into that corpus. A directory named
 	# after the skill would poison every no-retrieval case with a false positive.
 	_casedir=$(mktemp -d "$WORK_ROOT/eval-case-$AGENT-$_id.XXXXXX")
 
 	if [ "$_family_pin" != '-' ]; then
-		printf 'family=%s\n' "$_family_pin" >"$_casedir/.sndocs"
+		printf 'family=%s\n' "$_family_pin" >"$_casedir/.docs"
 	fi
 
 	_corpus="$_casedir/corpus.txt"
@@ -281,7 +281,7 @@ run_case() {
 		fi
 		;;
 	no-retrieval)
-		if mentions_sndocs "$_corpus"; then
+		if mentions_docs "$_corpus"; then
 			_ok=0
 			_reason='retrieval was triggered when it should not have been'
 		elif cites_a_url "$_answer"; then

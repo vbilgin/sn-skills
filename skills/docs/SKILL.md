@@ -38,22 +38,22 @@ Every answer this skill produces obeys these. They are the reason it exists.
 
 ## Procedure
 
-Every command below is `bin/sndocs` inside this skill's own directory tree, not whatever
-`bin/sndocs` might mean relative to the current working directory — a retrieval question can come
+Every command below is `bin/docs` inside this skill's own directory tree, not whatever
+`bin/docs` might mean relative to the current working directory — a retrieval question can come
 up in the middle of unrelated project work anywhere, and the working directory is never this
 skill's own. Resolve the root once, in the same shell session as the rest of this procedure, and
-reuse it as `SNDOCS_ROOT`:
+reuse it as `DOCS_ROOT`:
 
 1. `CLAUDE_PLUGIN_ROOT`, if set — Claude Code, loaded from an installed plugin.
 2. `PLUGIN_ROOT`, if set — Codex, loaded from an installed plugin.
 3. Otherwise, this file's own location. This invocation reported a base directory for this skill
-   — it ends in `skills/docs`; strip that suffix and you have `SNDOCS_ROOT`. Use that literal,
+   — it ends in `skills/docs`; strip that suffix and you have `DOCS_ROOT`. Use that literal,
    resolved path in the commands below. Never fall back to a bare `.` or a relative path: nothing
    guarantees the working directory is this skill's root, and a wrong guess fails silently as
    "command not found" rather than loudly.
 
-Every command in this procedure is `"$SNDOCS_ROOT/bin/sndocs"`, and the routing table and synonym
-reference live under `"$SNDOCS_ROOT/skills/docs/"`.
+Every command in this procedure is `"$DOCS_ROOT/bin/docs"`, and the routing table and synonym
+reference live under `"$DOCS_ROOT/skills/docs/"`.
 
 ### 0. Decide whether this needs retrieval at all
 
@@ -65,8 +65,8 @@ generic code, retrieve only for the ServiceNow-specific part.
 ### 1. Resolve the family and make sure the cache is current
 
 ```
-"$SNDOCS_ROOT/bin/sndocs" family
-"$SNDOCS_ROOT/bin/sndocs" sync --family <family>
+"$DOCS_ROOT/bin/docs" family
+"$DOCS_ROOT/bin/docs" sync --family <family>
 ```
 
 `sync` is cheap when the cache is already fresh — it's a no-op, not a re-clone. `family` and
@@ -75,12 +75,12 @@ their JSON. State both the family and where it came from in the answer: an answe
 the family of is not attributable. If this exits reporting a family as out of support, stop and
 relay that verbatim — it is not a bug to route around.
 
-Run `"$SNDOCS_ROOT/bin/sndocs" status --family <family>` to get the cache's age and staleness as
+Run `"$DOCS_ROOT/bin/docs" status --family <family>` to get the cache's age and staleness as
 JSON. If `stale` is `true`, state the cache's age on the answer; don't refresh proactively past
 what `sync` already does; a stale cache still answers.
 
 Installed-app (Store) content lives on a separate, unversioned `store` branch, not inside any
-family's cache — `"$SNDOCS_ROOT/bin/sndocs" sync --family store` caches it independently. Consult it for
+family's cache — `"$DOCS_ROOT/bin/docs" sync --family store` caches it independently. Consult it for
 questions about a Store-installed application; it's always current for "the newest published
 Store docs" rather than pinned to a release, which is exactly what to say when citing it.
 
@@ -91,7 +91,7 @@ bridge queries like "ATF" or "AWA" to the term the documentation actually uses. 
 from `llms.txt`**, so it is not part of the default cone and must be pulled in deliberately:
 
 ```
-"$SNDOCS_ROOT/bin/sndocs" widen --family <family> --publication vocabulary
+"$DOCS_ROOT/bin/docs" widen --family <family> --publication vocabulary
 ```
 
 Then read `markdown/vocabulary/sn-docs-synonym-terms-enus.md` from the cache (small; fine to read
@@ -101,7 +101,7 @@ preferred term, and search precision depends on matching that vocabulary.
 
 ### 3. Route: routing table first, then the heading index, then full text as fallback
 
-Check `"$SNDOCS_ROOT/skills/docs/routing.tsv"` for the (normalized) concept. It's a small, curated,
+Check `"$DOCS_ROOT/skills/docs/routing.tsv"` for the (normalized) concept. It's a small, curated,
 diffable table — a handful of high-traffic concepts mapped to the one publication that's
 authoritative for them, because several publications can plausibly mention a concept (ACLs show
 up in application-development too) and only one is the entry point. If the concept isn't in the
@@ -111,15 +111,15 @@ If the routing table names a publication not yet in the cone, widen it before co
 anything (contract 4):
 
 ```
-"$SNDOCS_ROOT/bin/sndocs" widen --family <family> --publication <publication>
+"$DOCS_ROOT/bin/docs" widen --family <family> --publication <publication>
 ```
 
 A publication upstream doesn't publish for this family fails loudly by name — that failure is
 itself informative (the family doesn't have this content), distinct from "not cached yet."
 
 Then consult the generated heading index at `index.jsonl`, written next to (not inside) the
-checkout `sndocs status`'s `cache` field points at — i.e. `$(dirname <cache>)/index.jsonl`.
-Regenerate it with `"$SNDOCS_ROOT/bin/sndocs" index --family <family>` if it's missing, or if it has no record
+checkout `docs status`'s `cache` field points at — i.e. `$(dirname <cache>)/index.jsonl`.
+Regenerate it with `"$DOCS_ROOT/bin/docs" index --family <family>` if it's missing, or if it has no record
 whose `path` starts with `markdown/<publication>/` for a publication you just widened to — that's
 the sign the widen actually grew the cone rather than finding the publication already cached
 (`widen` is a no-op when nothing changed, so don't regenerate on the strength of having merely
@@ -137,12 +137,12 @@ remaining contracts applies before you even open the file:
 - `status: "unreadable"` — a *local* problem (the file didn't open when the index was built,
   typically a sparse checkout that didn't actually materialize it), not an upstream defect. Don't
   report this as contract 5 — that would blame ServiceNow for a local cache fault. Re-run
-  `"$SNDOCS_ROOT/bin/sndocs" sync --family <family>` and `"$SNDOCS_ROOT/bin/sndocs" index --family <family>`; if the record is
+  `"$DOCS_ROOT/bin/docs" sync --family <family>` and `"$DOCS_ROOT/bin/docs" index --family <family>`; if the record is
   still `unreadable` after that, say retrieval failed locally, not that the topic is undocumented.
 - `status: "ok"` — proceed to read discipline, below.
 
 If nothing in the routing table or the heading index matches, full-text search over whatever
-`sndocs status` currently reports as cached (its `publications` field) with your own grep/search
+`docs status` currently reports as cached (its `publications` field) with your own grep/search
 tools is the fallback. If that also finds nothing, that's contract 2: say so, plainly, and stop —
 don't go widen more publications on a hunch first. A concept absent from the routing table, with
 no heading match and no full-text match in the cone you already have, is exactly what "documented
@@ -178,17 +178,17 @@ would misstate its provenance.
 
 ## Cache commands reference
 
-The cache is owned entirely by `bin/sndocs`; never read, reuse, or write to any other clone.
-Full interface: `"$SNDOCS_ROOT/bin/sndocs" help`. The commands this procedure uses (`sndocs` below
-is shorthand for `"$SNDOCS_ROOT/bin/sndocs"`, resolved once at the top of this procedure):
+The cache is owned entirely by `bin/docs`; never read, reuse, or write to any other clone.
+Full interface: `"$DOCS_ROOT/bin/docs" help`. The commands this procedure uses (`docs` below
+is shorthand for `"$DOCS_ROOT/bin/docs"`, resolved once at the top of this procedure):
 
 | Command | Used for |
 | --- | --- |
-| `sndocs family` | Which family and where it was resolved from, without touching the network. |
-| `sndocs sync --family <f>` | Create or refresh the cache; a no-op when already fresh. |
-| `sndocs widen --family <f> --publication <p>` | Extend the cone to a publication not yet cached; fails by name if upstream doesn't publish it. |
-| `sndocs status --family <f>` | Cache age, staleness, cache path, and what's cached vs. what upstream publishes — as JSON. |
-| `sndocs index --family <f>` | (Re)generate `index.jsonl` from whatever the cone currently holds. |
+| `docs family` | Which family and where it was resolved from, without touching the network. |
+| `docs sync --family <f>` | Create or refresh the cache; a no-op when already fresh. |
+| `docs widen --family <f> --publication <p>` | Extend the cone to a publication not yet cached; fails by name if upstream doesn't publish it. |
+| `docs status --family <f>` | Cache age, staleness, cache path, and what's cached vs. what upstream publishes — as JSON. |
+| `docs index --family <f>` | (Re)generate `index.jsonl` from whatever the cone currently holds. |
 
 Never wrap these, or grep, in another layer of tooling — the host agent's own search and read
 tools are the retrieval mechanism; this skill only tells you where and how to point them.
