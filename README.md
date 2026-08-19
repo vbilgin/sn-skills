@@ -1,12 +1,33 @@
-# skill-sndocs
+# sn-skills
 
-A portable agent skill that gives AI coding agents **family-correct, cited retrieval** over
+Third-party AI skills for those working in ServiceNow. Not affiliated with ServiceNow, Inc.
+
+This repository ships one skill so far: **`docs`** — "Right docs. Right family. Cited." It
+gives AI coding agents family-correct, cited retrieval over
 [`ServiceNow/ServiceNowDocs`](https://github.com/ServiceNow/ServiceNowDocs) — ServiceNow's
 ~49,000-file documentation repository published for LLM consumption.
+
+`docs` promises:
+
+- **The right release family.** Docs are branched per family; it answers from the branch your
+  project is pinned to, never from whatever is newest.
+- **No silent gaps.** `llms.txt` under-retrieves — the AI-specific synonym reference isn't even
+  listed in it — and `docs` reads around that, at runtime, every time.
+- **A citation on every answer.** Every response traces back to a `canonical_url` on
+  servicenow.com/docs, so it can be checked, not just trusted.
+- **No vendored content to go stale.** Everything is fetched from upstream into a local cache
+  outside version control; there is no embedded copy of the docs.
 
 > **Status: v1.1.0.** The skill is installable, and its retrieval strategy is measured, not just
 > designed: 20/20 golden questions pass against both Claude Code and Codex — see
 > [Eval results](#eval-results).
+
+```bash
+claude plugin marketplace add vbilgin/sn-skills
+claude plugin install sn-skills@sn-skills
+```
+
+See [Installation](#installation) below for the Codex equivalent and other agents.
 
 ## Why
 
@@ -38,7 +59,7 @@ ServiceNow publishes its docs as markdown specifically for agents, and its READM
 
 ## Installation
 
-The skill definition, the routing table, and `bin/sndocs` all live in this one repository and
+The skill definition, the routing table, and `bin/docs` all live in this one repository and
 ship together — there is nothing to build and nothing to configure beyond optionally pinning a
 family (see [Using the cache executable](#using-the-cache-executable) below, or just let it
 default).
@@ -46,18 +67,18 @@ default).
 **Claude Code:**
 
 ```bash
-claude plugin marketplace add vbilgin/skill-sndocs
-claude plugin install sndocs@sndocs
+claude plugin marketplace add vbilgin/sn-skills
+claude plugin install sn-skills@sn-skills
 ```
 
-Or, from inside a session: `/plugin marketplace add vbilgin/skill-sndocs` then
-`/plugin install sndocs@sndocs`.
+Or, from inside a session: `/plugin marketplace add vbilgin/sn-skills` then
+`/plugin install sn-skills@sn-skills`.
 
 **Codex:**
 
 ```bash
-codex plugin marketplace add vbilgin/skill-sndocs
-codex plugin add sndocs@sndocs
+codex plugin marketplace add vbilgin/sn-skills
+codex plugin add sn-skills@sn-skills
 ```
 
 Codex reads the same `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` Claude
@@ -65,36 +86,36 @@ Code does — verified against `codex` 0.147.0, see
 [`docs/adr/0004-packaging-shares-one-manifest.md`](docs/adr/0004-packaging-shares-one-manifest.md).
 There is no separate Codex manifest to fall out of sync with the Claude one.
 
-Both commands install a read-only, updatable copy of this repository; `bin/sndocs` and the skill
+Both commands install a read-only, updatable copy of this repository; `bin/docs` and the skill
 definition travel together, and the skill locates its own executable at install time regardless
 of which directory you're working in when a ServiceNow question comes up.
 
 **Any other agent that reads `AGENTS.md`:** clone or vendor this repository somewhere the agent
 can read it, and its root [`AGENTS.md`](AGENTS.md) points at
-[`skills/sndocs/SKILL.md`](skills/sndocs/SKILL.md). This path has been exercised as a file layout
+[`skills/docs/SKILL.md`](skills/docs/SKILL.md). This path has been exercised as a file layout
 (the plugin installs above materialize exactly this shape) but not against a live non-Claude,
 non-Codex agent — treat it as reference until someone reports it working end to end.
 
 Setup after install is one command with no language runtime, virtual environment, or package
-manager — `bin/sndocs sync --family <family>` clones a sparse, blobless checkout (measured: 1.4s)
+manager — `bin/docs sync --family <family>` clones a sparse, blobless checkout (measured: 1.4s)
 and answers the first question from it; nothing downloads the full 269 MB documentation set.
 
 ## Using the cache executable
 
-`bin/sndocs` is dependency-free POSIX shell. `git` and a POSIX userland are the whole
+`bin/docs` is dependency-free POSIX shell. `git` and a POSIX userland are the whole
 dependency list — no Node, no Python virtual environment, no package manager.
 
 ```bash
-bin/sndocs sync --family australia
+bin/docs sync --family australia
 ```
 
-That creates a blobless, shallow, sparse clone at `${XDG_CACHE_HOME:-~/.cache}/sndocs/<family>`
+That creates a blobless, shallow, sparse clone at `${XDG_CACHE_HOME:-~/.cache}/docs/<family>`
 holding the API reference publication plus every publication index, and records the resolved
 commit and fetch timestamp alongside it. Syncing again while that cache is fresh is a no-op;
 syncing a cache older than seven days refreshes it first, so ordinary use keeps it current.
 
 ```bash
-bin/sndocs widen --family australia --publication platform-security
+bin/docs widen --family australia --publication platform-security
 ```
 
 That extends the cache to cover a publication it does not hold yet, pulling only the new
@@ -103,7 +124,7 @@ widened cone is coherent about which snapshot it holds. A publication upstream d
 is refused by name, which is what keeps "not cached" distinguishable from "not documented."
 
 ```bash
-bin/sndocs refresh --family australia
+bin/docs refresh --family australia
 ```
 
 That fetches the family again now and records the new commit and fetch timestamp, so nobody
@@ -111,12 +132,12 @@ waits for the staleness window after a release ships. If upstream cannot be reac
 existing cache is kept and its age reported — offline is a degraded mode, not a failure.
 
 ```bash
-bin/sndocs family
+bin/docs family
 ```
 
 That prints the family every other command would work on and where that family came from, as
 JSON on stdout. Resolution, highest wins: `--family` on the invocation; then the nearest
-`.sndocs` file at or above the working directory; then `$XDG_CONFIG_HOME/sndocs/config`; then
+`.docs` file at or above the working directory; then `$XDG_CONFIG_HOME/docs/config`; then
 the newest family, with a warning that no family was configured. Both files are `key=value`
 lines with `#` comments, and the key is `family`.
 
@@ -133,7 +154,7 @@ instance, and specifically not something to paper over by quietly answering from
 family.
 
 ```bash
-bin/sndocs status --family australia
+bin/docs status --family australia
 ```
 
 That prints the family and where it was resolved from, the commit, fetch timestamp, cache age
@@ -144,7 +165,7 @@ non-zero if that family has no cache. Naming what is cached — rather than repo
 yes — is what lets "not downloaded" be told apart from "not documented."
 
 ```bash
-bin/sndocs index --family australia
+bin/docs index --family australia
 ```
 
 That walks every topic the cache currently holds in one pass and writes a heading index to the
@@ -156,10 +177,10 @@ needs a grep, not a parser — and it lives inside the cache, outside version co
 whole on every run so it can never rot out of sync with what the cone holds.
 
 ```bash
-bin/sndocs verify --family australia
+bin/docs verify --family australia
 ```
 
-That diffs [`skills/sndocs/routing.tsv`](skills/sndocs/routing.tsv) — the curated concept→publication
+That diffs [`skills/docs/routing.tsv`](skills/docs/routing.tsv) — the curated concept→publication
 table `SKILL.md` routes through — against the upstream structure the cache already holds, and
 reports every publication a row names that no longer exists, every entry topic that has moved or
 disappeared, and every entry topic no longer linked from its own publication's index, as JSON on
@@ -171,14 +192,14 @@ been widened to, so `verify` reads only what the cache already fetched. It catch
 drift only — a monthly content refresh that changes what a page says without moving, renaming, or
 delisting it is invisible to it, and the command says so in its own output.
 
-`--upstream <repository>` (or `SNDOCS_UPSTREAM`) overrides the repository cloned from. It is a
+`--upstream <repository>` (or `DOCS_UPSTREAM`) overrides the repository cloned from. It is a
 supported part of the interface, and it exists so the test suite can run against a small local
-fixture rather than downloading 269 MB of monthly-changing upstream content. `SNDOCS_NOW`
+fixture rather than downloading 269 MB of monthly-changing upstream content. `DOCS_NOW`
 overrides the current time in the same spirit, so the suite can cross the seven-day staleness
 window without waiting a week. `--routing <file>` overrides which routing table `verify` checks,
 for the same reason: the suite verifies against a small fixture table, not the real one.
 
-Run `bin/sndocs help` for the full interface.
+Run `bin/docs help` for the full interface.
 
 ## Tests
 
@@ -196,7 +217,7 @@ protocol, so a test that reaches for the network fails loudly rather than downlo
 evals/run.sh --agent claude   # or: --agent codex
 ```
 
-`tests/run.sh` checks `bin/sndocs` in isolation, against a fixture. It cannot check the thing
+`tests/run.sh` checks `bin/docs` in isolation, against a fixture. It cannot check the thing
 this skill actually promises: that a real agent, given the real skill definition, retrieves the
 right documentation and cites it. `evals/run.sh` closes that gap — it drives the named agent
 non-interactively, one subprocess per question in [`evals/questions.tsv`](evals/questions.tsv),
@@ -219,7 +240,7 @@ requires the agent report an upstream defect rather than "not covered"; and a qu
 trigger no retrieval at all.
 
 **The curated routing table earned its keep.** Every routing-disambiguation case's tool-call
-transcript shows `skills/sndocs/routing.tsv` consulted before the agent settled on the correct
+transcript shows `skills/docs/routing.tsv` consulted before the agent settled on the correct
 publication — both agents actually route through it rather than guessing right on general
 knowledge. It stays.
 
@@ -232,17 +253,31 @@ the current suite; see the comments in `evals/run.sh` and `evals/questions.tsv` 
 
 ## Correctness contracts
 
-These are the reason the skill exists. Every one of them is an eval case.
+These are the reason the `docs` skill exists. Each is a numbered promise, and each is exercised
+by a category of golden question in [`evals/questions.tsv`](evals/questions.tsv):
 
-1. Never state a Glide API signature, ACL behaviour, or version-dependent fact from memory.
-2. When retrieval finds nothing, **say so** — never fall back to model priors.
-3. Always cite the `canonical_url` so the answer can be verified against servicenow.com/docs.
-4. "Not checked out" is not "not documented." The sparse cone is introspectable so contract 2
-   cannot misfire.
-5. An empty or truncated upstream file (a known, recurring upstream build defect) is reported
-   as such, with the canonical URL — never as "not covered."
-6. When a family's branch is deleted upstream, say plainly that the pinned release is
-   out of support. Xanadu will disappear.
+1. **Never state a Glide API signature, ACL behaviour, or version-dependent fact from memory.**
+   Exercised by the `api-slice` category — the answer must come from a real method heading
+   sliced out of the actual file, not recollection.
+2. **When retrieval finds nothing, say so** — never fall back to model priors. Exercised by the
+   `absent` category.
+3. **Always cite the `canonical_url`** so the answer can be verified against
+   servicenow.com/docs. Exercised by the `family` category, which asserts the cited URL carries
+   the pinned family's own segment, not just any URL.
+4. **"Not checked out" is not "not documented."** The sparse cone is introspectable so contract
+   2 cannot misfire. Exercised by the `routing` category, which proves the curated table is
+   consulted rather than guessed.
+5. **An empty or truncated upstream file** (a known, recurring upstream build defect) is
+   reported as such, with the canonical URL — never as "not covered." Exercised by the `empty`
+   category.
+6. **When a family's branch is deleted upstream, say plainly that the pinned release is out of
+   support.** Xanadu will disappear. Not exercised by an eval category — deleting an upstream
+   branch can't be simulated against the real repository, so this contract is verified by
+   `tests/run.sh`'s fixture instead.
+
+The `lookup`, `synonym`, and `no-trigger` categories exercise the skill's baseline behaviour
+(plain retrieval, synonym normalization, staying silent outside scope) rather than a numbered
+correctness contract specifically.
 
 ## Scope
 
@@ -263,9 +298,8 @@ the `mobile`, `nofamily`, and `other` branches; an MCP server.
 
 ## Provenance and independence
 
-This is an independent community project. It is **not affiliated with, sponsored by, or
-endorsed by ServiceNow, Inc.** ServiceNow, Now Platform, and related marks are trademarks of
-ServiceNow, Inc.
+This is an independent community project (see the non-affiliation disclaimer at the top of this
+README). ServiceNow, Now Platform, and related marks are trademarks of ServiceNow, Inc.
 
 This repository **redistributes no ServiceNow documentation.** It fetches Apache-2.0-licensed
 markdown from `ServiceNow/ServiceNowDocs` at runtime into a local cache outside version
