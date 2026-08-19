@@ -1,4 +1,4 @@
-# skill-sndocs
+# sn-skills
 
 Building an agent skill for retrieval over [`ServiceNow/ServiceNowDocs`](https://github.com/ServiceNow/ServiceNowDocs).
 Read [README.md](README.md) for why this exists and what the correctness contracts are.
@@ -35,7 +35,7 @@ Verified 2026-08-06 against the `australia` branch. Re-verify before relying on 
 
 ### Issue tracker
 
-Issues live in GitHub Issues at `vbilgin/skill-sndocs`, via the `gh` CLI.
+Issues live in GitHub Issues at `vbilgin/sn-skills`, via the `gh` CLI.
 See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
