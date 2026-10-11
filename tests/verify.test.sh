@@ -252,6 +252,51 @@ test_refuses_a_routing_file_that_contributes_no_rows() {
 	assert_contains "$RUN_ERR" "comments-routing.tsv"
 }
 
+test_a_longer_path_ending_in_the_entry_path_does_not_mask_an_unlinked_entry() {
+	upstream=$(private_upstream)
+	add_collision_topics
+	_dir=$(private_upstream_path)
+	# a stale link whose path merely ends in the entry path, as a rename leaves behind
+	printf -- "- [Stale](legacy/access-control/access-control-rules.md)\n" \
+		>>"$_dir/markdown/platform-security/index.md"
+	git -C "$_dir" -c user.name=fixture -c user.email=fixture@example.invalid \
+		-c commit.gpgsign=false commit -qam "docs: stale suffix link"
+	run_docs sync --family australia --upstream "$upstream"
+	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
+
+	routing="$DOCS_TEST_TMP/routing.tsv"
+	printf "suffix-topic\tplatform-security\taccess-control/access-control-rules.md\tdelisted; only a longer stale link remains\n" >"$routing"
+
+	run_docs verify --family australia --routing "$routing"
+	[ "$RUN_STATUS" -ne 0 ] || fail "a longer link ending in the entry path should not count as linking it"
+	assert_contains "$RUN_OUT" '"type":"unlinked-from-index"'
+}
+
+test_recognises_an_entry_linked_by_an_absolute_upstream_url() {
+	upstream=$(private_upstream)
+	add_collision_topics
+	_dir=$(private_upstream_path)
+	# the shape real upstream indexes use: absolute raw URLs ending in markdown/<publication>/<entry>
+	base=https://raw.githubusercontent.com/ServiceNow/ServiceNowDocs/australia/markdown/platform-security
+	printf -- "- [Linked](%s/access-control/access-control-rules.md) -- desc\n" "$base" \
+		>>"$_dir/markdown/platform-security/index.md"
+	printf -- "- [Stale](%s/legacy/access-control/other.md)\n" "$base" \
+		>>"$_dir/markdown/platform-security/index.md"
+	git -C "$_dir" -c user.name=fixture -c user.email=fixture@example.invalid \
+		-c commit.gpgsign=false commit -qam "docs: absolute links"
+	run_docs sync --family australia --upstream "$upstream"
+	assert_equals 0 "$RUN_STATUS" "sync should exit zero: $RUN_ERR"
+
+	routing="$DOCS_TEST_TMP/routing.tsv"
+	printf "linked\tplatform-security\taccess-control/access-control-rules.md\tlinked by absolute URL\n" >"$routing"
+	run_docs verify --family australia --routing "$routing"
+	assert_equals 0 "$RUN_STATUS" "an absolute-URL link should count as linked: $RUN_OUT"
+
+	printf "stale\tplatform-security\taccess-control/other.md\tonly a longer absolute link exists\n" >"$routing"
+	run_docs verify --family australia --routing "$routing"
+	[ "$RUN_STATUS" -ne 0 ] || fail "a longer absolute URL ending in the entry path should not count"
+}
+
 run_tests \
 	test_reports_a_publication_that_no_longer_exists_upstream \
 	test_reports_an_entry_topic_that_has_moved_or_disappeared \
@@ -263,4 +308,6 @@ run_tests \
 	test_states_the_structural_only_limitation_in_its_own_output \
 	test_reports_a_missing_cache_clearly_and_exits_non_zero \
 	test_refuses_a_routing_file_that_does_not_exist \
-	test_refuses_a_routing_file_that_contributes_no_rows
+	test_refuses_a_routing_file_that_contributes_no_rows \
+	test_a_longer_path_ending_in_the_entry_path_does_not_mask_an_unlinked_entry \
+	test_recognises_an_entry_linked_by_an_absolute_upstream_url

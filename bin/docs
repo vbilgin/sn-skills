@@ -1095,7 +1095,14 @@ verify_entry_exists() {
 verify_entry_linked() {
 	_index="$1/markdown/$2/index.md"
 	[ -f "$_index" ] || return 0
-	grep -qF "$3" "$_index"
+	# The path must stand alone as a link target: opened by a link delimiter
+	# (optionally ./ or ../-prefixed) or follow the publication's own
+	# markdown/<publication>/ directory — the absolute raw URLs real indexes
+	# use — and be closed by a delimiter. A longer path that merely ends in the
+	# entry path — legacy/a/b.md for a/b.md — does not count.
+	_pattern=$(printf '%s' "$3" | sed 's/[][\.*^$+?(){}|]/\\&/g')
+	_publication=$(printf '%s' "$2" | sed 's/[][\.*^$+?(){}|]/\\&/g')
+	grep -qE "((^|[(<\"'[:space:]])(\\.\\.?/)*|/markdown/${_publication}/)${_pattern}(\$|[])>#?\"'[:space:]])" "$_index"
 }
 
 verify_emit() {
