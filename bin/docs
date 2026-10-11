@@ -506,6 +506,54 @@ cache_age() {
 	age_seconds "$_fetched_epoch"
 }
 
+# cache_open <presence> <cli_family> — the one step that opens the Cache for
+# this invocation. Called in the current shell, so a failure exits the real
+# shell, and it communicates through these globals rather than a record:
+#
+#   CACHE_FAMILY              the resolved Family
+#   CACHE_FAMILY_SOURCE       argument | project | user | default
+#   CACHE_FAMILY_SOURCE_PATH  the configuration file; empty unless project/user
+#   CACHE_DIR                 where the Cache lives for that Family
+#   CACHE_AGE                 seconds since the Snapshot; empty when the Cache
+#                             was not read (none) or does not exist yet (may)
+#   CACHE_STALE               true | false by the Staleness window; empty
+#                             exactly when CACHE_AGE is
+#
+# <presence> says what the caller needs of the Cache:
+#   none   the Family only; nothing is read from disk (family)
+#   may    the Cache may be absent; age is set only when it exists (sync)
+#   must   the Cache must exist, or die saying how to create it
+#
+# The policy is report-only: opening never fetches. Family resolution reports
+# the Family and its source on stderr, whatever the presence.
+cache_open() {
+	_presence=$1
+	case $_presence in
+	none | may | must) ;;
+	*) die "internal error: unknown cache presence '$_presence'" ;;
+	esac
+
+	_record=$(family_context "${2:-}")
+	_tab=$(printf '\t')
+	IFS="$_tab" read -r CACHE_FAMILY CACHE_FAMILY_SOURCE CACHE_FAMILY_SOURCE_PATH <<EOF
+$_record
+EOF
+	CACHE_DIR=$(family_dir "$CACHE_FAMILY")
+	CACHE_AGE=''
+	CACHE_STALE=''
+
+	[ "$_presence" = none ] && return 0
+
+	if [ "$_presence" = must ]; then
+		assert_cache_exists "$CACHE_DIR" "$CACHE_FAMILY"
+	elif ! { [ -d "$CACHE_DIR/repo/.git" ] && [ -f "$CACHE_DIR/snapshot" ]; }; then
+		return 0
+	fi
+
+	CACHE_AGE=$(cache_age "$CACHE_DIR" "$CACHE_FAMILY")
+	if [ "$CACHE_AGE" -lt "$DOCS_STALE_AFTER" ]; then CACHE_STALE=false; else CACHE_STALE=true; fi
+}
+
 # fetch_family <dir> <family> — fetches the family again and re-records the
 # snapshot. Returns non-zero, leaving the cache and its snapshot as they were,
 # when upstream cannot be reached: offline is a degraded mode, not a failure,
@@ -1041,17 +1089,13 @@ cmd_family() {
 		esac
 	done
 
-	tab=$(printf '\t')
-	_record=$(family_context "$cli_family")
-	IFS="$tab" read -r family family_source family_source_path <<EOF
-$_record
-EOF
+	cache_open none "$cli_family"
 
 	printf '{\n'
-	printf '  "family": "%s",\n' "$(json_escape "$family")"
-	printf '  "family_source": "%s",\n' "$(json_escape "$family_source")"
-	printf '  "family_source_path": "%s",\n' "$(json_escape "$family_source_path")"
-	printf '  "cache": "%s"\n' "$(json_escape "$(family_dir "$family")/repo")"
+	printf '  "family": "%s",\n' "$(json_escape "$CACHE_FAMILY")"
+	printf '  "family_source": "%s",\n' "$(json_escape "$CACHE_FAMILY_SOURCE")"
+	printf '  "family_source_path": "%s",\n' "$(json_escape "$CACHE_FAMILY_SOURCE_PATH")"
+	printf '  "cache": "%s"\n' "$(json_escape "$CACHE_DIR/repo")"
 	printf '}\n'
 }
 
