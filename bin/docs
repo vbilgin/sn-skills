@@ -1148,6 +1148,7 @@ EOF
 	trap 'rm -f "$rows" "$staging"' EXIT INT TERM
 
 	grep -v '^[[:space:]]*#' "$routing" | grep -v '^[[:space:]]*$' >"$rows" || true
+	[ -s "$rows" ] || die "no routing entries found to verify in $routing"
 
 	available=$(upstream_publications "$repo")
 	checked=0

@@ -235,6 +235,23 @@ test_refuses_a_routing_file_that_does_not_exist() {
 	assert_contains "$RUN_ERR" 'nonesuch.tsv'
 }
 
+test_refuses_a_routing_file_that_contributes_no_rows() {
+	sync_australia
+
+	empty="$DOCS_TEST_TMP/empty-routing.tsv"
+	: >"$empty"
+	run_docs verify --family australia --routing "$empty"
+	[ "$RUN_STATUS" -ne 0 ] || fail "verify should not exit zero when the routing file is empty"
+	assert_contains "$RUN_ERR" "empty-routing.tsv"
+	assert_not_contains "$RUN_ERR" "verified clean"
+
+	comments="$DOCS_TEST_TMP/comments-routing.tsv"
+	printf "# only a comment\n\n   \n# another\n" >"$comments"
+	run_docs verify --family australia --routing "$comments"
+	[ "$RUN_STATUS" -ne 0 ] || fail "verify should not exit zero when the routing file holds only comments"
+	assert_contains "$RUN_ERR" "comments-routing.tsv"
+}
+
 run_tests \
 	test_reports_a_publication_that_no_longer_exists_upstream \
 	test_reports_an_entry_topic_that_has_moved_or_disappeared \
@@ -245,4 +262,5 @@ run_tests \
 	test_runs_against_the_cache_without_a_network_round_trip_per_entry \
 	test_states_the_structural_only_limitation_in_its_own_output \
 	test_reports_a_missing_cache_clearly_and_exits_non_zero \
-	test_refuses_a_routing_file_that_does_not_exist
+	test_refuses_a_routing_file_that_does_not_exist \
+	test_refuses_a_routing_file_that_contributes_no_rows
